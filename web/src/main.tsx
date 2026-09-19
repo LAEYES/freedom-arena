@@ -1,5 +1,5 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
-import { loadOrCreatePlayerRemote, syncPlayerRemote } from './lib/supabase';
+import { loadOrCreatePlayerRemote, syncPlayerRemote } from './lib/backend';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
