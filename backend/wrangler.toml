@@ -5,4 +5,4 @@ compatibility_date = "2026-09-19"
 [[d1_databases]]
 binding = "DB"
 database_name = "freedom-arena"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "b3ad9829-12f1-4a53-95a2-37b65f143003"
