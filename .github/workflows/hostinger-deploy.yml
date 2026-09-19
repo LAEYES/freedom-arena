@@ -1,4 +1,4 @@
-# Force redeploy: Hostinger FTP public_html
+# Hostinger deploy for freedom-arena.fr
 name: Hostinger Deploy
 
 on:
@@ -32,13 +32,13 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
-          server: ${{ secrets.HOSTINGER_FTP_SERVER }}
-          username: ${{ secrets.HOSTINGER_FTP_USERNAME }}
+          server: ftp.freedom-arena.fr
+          username: u700346517.u700346517
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           protocol: ftp
           port: 21
           local-dir: web/dist/
-          server-dir: public_html/
+          server-dir: /home/u700346517/domains/freedom-arena.fr/public_html/
           dangerous-clean-slate: true
           exclude: |
             **/.git*
