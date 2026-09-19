@@ -1,0 +1,11 @@
+{
+  "name": "Freedom Arena",
+  "short_name": "Freedom Arena",
+  "description": "Freedom Arena × RPGQG Cards",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#070b16",
+  "theme_color": "#0b1222",
+  "lang": "fr"
+}
