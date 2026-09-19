@@ -48,7 +48,11 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
         vec3 p=a_position;
         p.x-=u_player_x;
         p.z-=u_player_y;
+        float walk=sin(u_time*5.0+u_player_x*0.8+u_player_y*0.6);
         p.y+=sin(u_time*1.5+p.x*0.8+p.z*0.6)*0.012;
+        // Subtle procedural walk/idle motion across the tactical scene.
+        p.y+=walk*0.018*(1.0-step(0.01,abs(p.y)));
+        p.x+=sin(u_time*2.5+p.z)*0.006;
         v_position=p;
         gl_Position=u_matrix*vec4(p,1.0);
       }`;
@@ -81,6 +85,8 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
         base+=vec3(0.18,0.025,0.02)*threatPulse;
         base+=vec3(0.18,0.08,0.025)*impact;
         base+=vec3(0.04,0.18,0.28)*projectile;
+        float muzzle=step(0.985,fract(u_time*3.4+v_position.x*0.31+v_position.z*0.17))*0.14;
+        base+=vec3(0.25,0.12,0.025)*muzzle;
         gl_FragColor=vec4(base,0.97);
       }`;
 
