@@ -124,6 +124,9 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       gl.uniform1f(threatLoc,threat);
       gl.uniform1f(weatherLoc,weather==='storm'?1:weather==='mist'?.5:weather==='frost'?.25:0);
       gl.uniform1f(cycleLoc,cycle==='night'?1:cycle==='dusk'?.6:cycle==='dawn'?.3:0);
+      // Additive pulse makes beacons readable without expensive particle systems.
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
       gl.drawArrays(gl.TRIANGLES,0,data.length/3);
       raf=requestAnimationFrame(draw);
     };
