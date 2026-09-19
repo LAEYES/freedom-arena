@@ -99,6 +99,12 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       [2.5,2,2.2,1.0,1.5],[5,4,1.3,1.9,1.3]
     ];
     buildings.forEach(b=>addCube(data,...b as [number,number,number,number,number]));
+    // Tactical FX geometry: central energy core, impact rings and threat beacons.
+    addCube(data,0,0,0.08,0.9,0.08);
+    addCube(data,0,0,0.12,0.08,0.9);
+    addCube(data,-2.2,-1.2,0.08,0.55,0.08);
+    addCube(data,2.2,1.2,0.08,0.55,0.08);
+
     // Landmark towers around the tactical arena.
     addCube(data,0,0,0.45,2.8,0.45);
     addCube(data,-0.9,0,0.22,1.8,0.22);
