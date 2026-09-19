@@ -1,0 +1,12 @@
+{
+  "name": "freedom-arena-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest"
+  }
+}
