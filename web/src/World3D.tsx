@@ -115,8 +115,9 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       gl.clearColor(.01,.02,.05,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       const aspect=canvas.width/Math.max(1,canvas.height);
       const s=0.105/Math.max(.7,aspect);
+      const zoom=1.0+Math.min(0.35,Math.abs(player.x%6-player.y%5)*0.01);
       const matrix=new Float32Array([
-        s,0,0,0, 0,s*1.35,0,0, 0,0,s,0,
+        s*zoom,0,0,0, 0,s*1.35*zoom,0,0, 0,0,s*zoom,0,
         0,-0.16,0,1
       ]);
       gl.uniformMatrix4fv(matrixLoc,false,matrix);
