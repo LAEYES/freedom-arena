@@ -93,6 +93,10 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       [2.5,2,2.2,1.0,1.5],[5,4,1.3,1.9,1.3]
     ];
     buildings.forEach(b=>addCube(data,...b as [number,number,number,number,number]));
+    // Landmark towers around the tactical arena.
+    addCube(data,0,0,0.45,2.8,0.45);
+    addCube(data,-0.9,0,0.22,1.8,0.22);
+    addCube(data,0.9,0,0.22,1.8,0.22);
     const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
     const loc=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0);
     const matrixLoc=gl.getUniformLocation(program,'u_matrix'),timeLoc=gl.getUniformLocation(program,'u_time');
