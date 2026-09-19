@@ -6,6 +6,10 @@ on:
     paths:
       - "web/**"
       - ".github/workflows/hostinger-deploy.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - ".github/workflows/hostinger-deploy.yml"
   workflow_dispatch:
 
 jobs:
@@ -27,6 +31,7 @@ jobs:
       - run: npm run build
 
       - name: Upload dist to Hostinger
+        if: github.event_name != 'pull_request'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ${{ secrets.HOSTINGER_FTP_SERVER }}
@@ -35,7 +40,7 @@ jobs:
           protocol: ftps
           port: 21
           local-dir: web/dist/
-          server-dir: ${{ secrets.HOSTINGER_FTP_SERVER_DIR }}
+          server-dir: public_html/
           exclude: |
             **/.git*
             **/.git*/**
