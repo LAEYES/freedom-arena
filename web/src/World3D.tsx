@@ -67,10 +67,16 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
         float storm=u_weather*0.10;
         float night=u_cycle*0.18;
         float threatGlow=min(u_threat/10.0,1.0);
+        // Procedural atmosphere: mist bands, rain/storm streaks and threat pulses.
+        float mist=0.045*u_weather*(0.5+0.5*sin(u_time*0.7+v_position.z*1.7));
+        float rain=step(0.92,fract(v_position.x*8.0+u_time*3.0))*u_weather*0.12;
+        float threatPulse=threatGlow*(0.025+0.025*sin(u_time*4.0+length(v_position.xz)*3.0));
         vec3 base=vec3(0.025,0.07,0.13);
         base+=vec3(0.025,0.06,0.09)*(1.0-night);
         base+=vec3(0.15,0.025,0.035)*threatGlow;
         base+=vec3(0.08,0.13,0.22)*(grid+pulse+storm);
+        base+=vec3(0.10,0.14,0.18)*(mist+rain);
+        base+=vec3(0.18,0.025,0.02)*threatPulse;
         gl_FragColor=vec4(base,0.97);
       }`;
 
