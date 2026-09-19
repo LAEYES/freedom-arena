@@ -99,6 +99,10 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
     addCube(data,0.9,0,0.22,1.8,0.22);
     const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
     const loc=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0);
+    // Lightweight tactical actors: player beacon, POI beacons and faction markers.
+    addCube(data,0,0,0.28,0.55,0.28);
+    addCube(data,-3,2,0.18,0.38,0.18);
+    addCube(data,3,-1,0.18,0.48,0.18);
     const matrixLoc=gl.getUniformLocation(program,'u_matrix'),timeLoc=gl.getUniformLocation(program,'u_time');
     const pxLoc=gl.getUniformLocation(program,'u_player_x'),pyLoc=gl.getUniformLocation(program,'u_player_y');
     const threatLoc=gl.getUniformLocation(program,'u_threat'),weatherLoc=gl.getUniformLocation(program,'u_weather'),cycleLoc=gl.getUniformLocation(program,'u_cycle');
