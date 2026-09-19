@@ -71,12 +71,16 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
         float mist=0.045*u_weather*(0.5+0.5*sin(u_time*0.7+v_position.z*1.7));
         float rain=step(0.92,fract(v_position.x*8.0+u_time*3.0))*u_weather*0.12;
         float threatPulse=threatGlow*(0.025+0.025*sin(u_time*4.0+length(v_position.xz)*3.0));
+        float impact=exp(-abs(sin(u_time*2.8+length(v_position.xz)*2.0))*7.0)*(0.04+0.05*threatGlow);
+        float projectile=step(0.975,fract(u_time*1.8+v_position.x*0.17-v_position.z*0.11))*0.09;
         vec3 base=vec3(0.025,0.07,0.13);
         base+=vec3(0.025,0.06,0.09)*(1.0-night);
         base+=vec3(0.15,0.025,0.035)*threatGlow;
         base+=vec3(0.08,0.13,0.22)*(grid+pulse+storm);
         base+=vec3(0.10,0.14,0.18)*(mist+rain);
         base+=vec3(0.18,0.025,0.02)*threatPulse;
+        base+=vec3(0.18,0.08,0.025)*impact;
+        base+=vec3(0.04,0.18,0.28)*projectile;
         gl_FragColor=vec4(base,0.97);
       }`;
 
