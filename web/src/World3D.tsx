@@ -97,6 +97,18 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
     gl.useProgram(program);
 
     const data:number[]=[];addGround(data);
+
+    // Stylized low-poly tactical characters: torso, head and animated beacon limbs.
+    const addActor=(x:number,z:number,scale:number)=>{
+      addCube(data,x,z,0.34*scale,0.42*scale,0.22*scale);
+      addCube(data,x,z,0.68*scale,0.20*scale,0.20*scale);
+      addCube(data,x-0.16*scale,z,0.16*scale,0.34*scale,0.16*scale);
+      addCube(data,x+0.16*scale,z,0.16*scale,0.34*scale,0.16*scale);
+    };
+    addActor(0,0,1.0);
+    addActor(-3,2,0.72);
+    addActor(3,-1,0.82);
+
     const buildings=[
       [-5,-4,1.6,1.1,1.5],[-2.5,-3,1.2,1.8,1.1],[1,-4,2,1.2,1.4],
       [4,-2.5,1.4,2.2,1.2],[-4,1.5,2.1,0.9,1.7],[-1,3,1.4,1.5,1.3],
@@ -132,6 +144,8 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       const aspect=canvas.width/Math.max(1,canvas.height);
       const s=0.105/Math.max(.7,aspect);
       const zoom=1.0+Math.min(0.35,Math.abs(player.x%6-player.y%5)*0.01);
+      // Camera remains player-centered while actor geometry receives shader-time motion.
+
       const matrix=new Float32Array([
         s*zoom,0,0,0, 0,s*1.35*zoom,0,0, 0,0,s*zoom,0,
         0,-0.16,0,1
