@@ -1,5 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { loadOrCreatePlayerRemote, syncPlayerRemote } from './lib/supabase';
+import { loadPlayerApi, savePlayerApi } from './lib/api';
 import { joinZonePresence, updateZonePresence, type ZonePresence } from './lib/realtime';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
@@ -326,7 +327,7 @@ function App() {
   const nearestNpc = zoneNpcs.reduce((nearest,npc)=>{const distance=Math.abs(npc.x-worldTile.x)+Math.abs(npc.y-worldTile.y);return distance<nearest.distance?{npc,distance}:nearest;},{npc:zoneNpcs[0],distance:Number.POSITIVE_INFINITY});
   const playerRef = useRef(player);
   useEffect(() => { playerRef.current = player; }, [player]);
-  const update = (next: typeof player) => { setPlayer(next); playerRef.current = next; savePlayer(next); void syncPlayerRemote(next); };
+  const update = (next: typeof player) => { setPlayer(next); playerRef.current = next; savePlayer(next); void savePlayerApi(next); void syncPlayerRemote(next); };
   const persistMovement = (tile: typeof worldTile) => {
     const next = { ...playerRef.current, worldTile: tile };
     playerRef.current = next;
@@ -433,13 +434,26 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadOrCreatePlayerRemote(player).then(result => {
-      if (!cancelled && result.player) {
-        savePlayer(result.player);
-        setPlayer(result.player);
-        setWorldTile(result.player.worldTile);
+    void (async () => {
+      const api = await loadPlayerApi();
+      if (cancelled) return;
+      if (api.player) {
+        savePlayer(api.player);
+        setPlayer(api.player);
+        setWorldTile(api.player.worldTile);
+        return;
       }
-    }).catch(() => {});
+      const remote = await loadOrCreatePlayerRemote(player);
+      if (cancelled) return;
+      if (remote.player) {
+        savePlayer(remote.player);
+        setPlayer(remote.player);
+        setWorldTile(remote.player.worldTile);
+        void savePlayerApi(remote.player);
+        return;
+      }
+      void savePlayerApi(player);
+    })().catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
