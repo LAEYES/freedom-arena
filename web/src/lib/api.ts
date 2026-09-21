@@ -13,6 +13,17 @@ function getPlayerId(): string {
   return id;
 }
 
+function normalizeApiPlayer(player: PlayerState): PlayerState {
+  return {
+    ...player,
+    npcMemories: Array.isArray(player.npcMemories) ? player.npcMemories : [],
+    visitedPoiIds: Array.isArray(player.visitedPoiIds) ? player.visitedPoiIds : [],
+    factionStates: Array.isArray(player.factionStates) ? player.factionStates : [],
+    quests: Array.isArray(player.quests) ? player.quests : [],
+    cards: Array.isArray(player.cards) ? player.cards : [],
+  };
+}
+
 export async function loadPlayerApi(): Promise<{ player: PlayerState | null; error: Error | null }> {
   try {
     const id = getPlayerId();
@@ -21,7 +32,7 @@ export async function loadPlayerApi(): Promise<{ player: PlayerState | null; err
     });
     if (!response.ok) throw new Error(`Player API GET failed: ${response.status}`);
     const body = await response.json() as { player?: PlayerState | null };
-    return { player: body.player ?? null, error: null };
+    return { player: body.player ? normalizeApiPlayer(body.player) : null, error: null };
   } catch (error) {
     return { player: null, error: error instanceof Error ? error : new Error('Player API unavailable') };
   }
@@ -37,7 +48,7 @@ export async function savePlayerApi(player: PlayerState): Promise<{ player: Play
     });
     if (!response.ok) throw new Error(`Player API POST failed: ${response.status}`);
     const body = await response.json() as { player?: PlayerState | null };
-    return { player: body.player ?? null, error: null };
+    return { player: body.player ? normalizeApiPlayer(body.player) : null, error: null };
   } catch (error) {
     return { player: null, error: error instanceof Error ? error : new Error('Player API unavailable') };
   }
