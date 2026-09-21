@@ -33,7 +33,7 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.6
         with:
           server: ftp.freedom-arena.fr
-          username: u700346517.u700346517
+          username: u700346517.MRIC
           password: ${{ secrets.HOSTINGER_FTP_PASSWORD }}
           protocol: ftp
           port: 21
