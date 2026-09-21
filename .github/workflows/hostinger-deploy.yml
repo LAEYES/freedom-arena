@@ -39,7 +39,7 @@ jobs:
           protocol: ftp
           port: 21
           local-dir: web/dist/
-          server-dir: /public_html/
+          server-dir: /home/u700346517/domains/freedom-arena.fr/public_html/
           dangerous-clean-slate: true
           exclude: |
             **/.git*
