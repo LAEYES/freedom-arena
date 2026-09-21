@@ -18,29 +18,43 @@ type PlayerPayload = {
   lastDiscovery?: string; arenaWins?: number; equippedCardId?: string | null;
   fusionMaterials?: number; worldThreat?: number; worldResources?: number;
   worldTile?: { x: number; y: number }; visitedPoiIds?: string[];
-  factionStates?: unknown[]; quests?: unknown[]; cards?: unknown[];
+  factionStates?: unknown[]; npcMemories?: unknown[]; quests?: unknown[]; cards?: unknown[];
+};
+
+const finiteNumber = (value: unknown, fallback: number) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 };
 
 const normalize = (p: PlayerPayload) => ({
   name: String(p.name ?? "Arena Player").slice(0, 24),
-  level: Math.max(1, Number(p.level ?? 1)),
-  xp: Math.max(0, Number(p.xp ?? 0)),
+  level: Math.max(1, Math.floor(finiteNumber(p.level, 1))),
+  xp: Math.max(0, Math.floor(finiteNumber(p.xp, 0))),
   faction: String(p.faction ?? "Aegis"),
-  victories: Math.max(0, Number(p.victories ?? 0)),
+  victories: Math.max(0, Math.floor(finiteNumber(p.victories, 0))),
   zone_id: String(p.zoneId ?? "outpost"),
-  exploration_count: Math.max(0, Number(p.explorationCount ?? 0)),
-  last_discovery: String(p.lastDiscovery ?? ""),
-  arena_wins: Math.max(0, Number(p.arenaWins ?? 0)),
+  exploration_count: Math.max(0, Math.floor(finiteNumber(p.explorationCount, 0))),
+  last_discovery: String(p.lastDiscovery ?? "").slice(0, 120),
+  arena_wins: Math.max(0, Math.floor(finiteNumber(p.arenaWins, 0))),
   equipped_card_id: p.equippedCardId ?? null,
-  fusion_materials: Math.max(0, Number(p.fusionMaterials ?? 0)),
-  world_threat: Math.max(1, Number(p.worldThreat ?? 1)),
-  world_resources: Math.max(0, Number(p.worldResources ?? 0)),
+  fusion_materials: Math.max(0, Math.floor(finiteNumber(p.fusionMaterials, 0))),
+  world_threat: Math.max(1, Math.floor(finiteNumber(p.worldThreat, 1))),
+  world_resources: Math.max(0, Math.floor(finiteNumber(p.worldResources, 0))),
   world_tile: JSON.stringify(p.worldTile ?? { x: 0, y: 0 }),
-  visited_poi_ids: JSON.stringify(p.visitedPoiIds ?? []),
-  faction_states: JSON.stringify(p.factionStates ?? []),
-  quests: JSON.stringify(p.quests ?? []),
-  cards: JSON.stringify(p.cards ?? []),
+  visited_poi_ids: JSON.stringify(Array.isArray(p.visitedPoiIds) ? p.visitedPoiIds : []),
+  faction_states: JSON.stringify(Array.isArray(p.factionStates) ? p.factionStates : []),
+  npc_memories: JSON.stringify(Array.isArray(p.npcMemories) ? p.npcMemories : []),
+  quests: JSON.stringify(Array.isArray(p.quests) ? p.quests : []),
+  cards: JSON.stringify(Array.isArray(p.cards) ? p.cards : []),
 });
+
+const parseJson = <T>(value: unknown, fallback: T): T => {
+  try {
+    return JSON.parse(String(value ?? "")) as T;
+  } catch {
+    return fallback;
+  }
+};
 
 const fromRow = (row: Record<string, unknown>) => ({
   name: row.name,
@@ -56,11 +70,12 @@ const fromRow = (row: Record<string, unknown>) => ({
   fusionMaterials: row.fusion_materials,
   worldThreat: row.world_threat,
   worldResources: row.world_resources,
-  worldTile: JSON.parse(String(row.world_tile ?? '{"x":0,"y":0}')),
-  visitedPoiIds: JSON.parse(String(row.visited_poi_ids ?? "[]")),
-  factionStates: JSON.parse(String(row.faction_states ?? "[]")),
-  quests: JSON.parse(String(row.quests ?? "[]")),
-  cards: JSON.parse(String(row.cards ?? "[]")),
+  worldTile: parseJson(row.world_tile, { x: 0, y: 0 }),
+  visitedPoiIds: parseJson(row.visited_poi_ids, []),
+  factionStates: parseJson(row.faction_states, []),
+  npcMemories: parseJson(row.npc_memories, []),
+  quests: parseJson(row.quests, []),
+  cards: parseJson(row.cards, []),
 });
 
 export default {
@@ -76,8 +91,12 @@ export default {
     if (url.pathname === "/player" && request.method === "GET") {
       const id = url.searchParams.get("id");
       if (!id) return json({ error: "missing id" }, 400);
-      const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
-      return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
+      try {
+        const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
+        return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
+      } catch {
+        return json({ error: "database_read_failed" }, 500);
+      }
     }
 
     if (url.pathname === "/player" && request.method === "POST") {
@@ -86,27 +105,31 @@ export default {
       if (!id || !body?.player) return json({ error: "invalid payload" }, 400);
 
       const p = normalize(body.player);
-      await env.DB.prepare(`INSERT INTO players (
-        id,name,level,xp,faction,victories,zone_id,exploration_count,last_discovery,
-        arena_wins,equipped_card_id,fusion_materials,world_threat,world_resources,
-        world_tile,visited_poi_ids,faction_states,quests,cards,updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET
-        name=excluded.name,level=excluded.level,xp=excluded.xp,faction=excluded.faction,
-        victories=excluded.victories,zone_id=excluded.zone_id,exploration_count=excluded.exploration_count,
-        last_discovery=excluded.last_discovery,arena_wins=excluded.arena_wins,
-        equipped_card_id=excluded.equipped_card_id,fusion_materials=excluded.fusion_materials,
-        world_threat=excluded.world_threat,world_resources=excluded.world_resources,
-        world_tile=excluded.world_tile,visited_poi_ids=excluded.visited_poi_ids,
-        faction_states=excluded.faction_states,quests=excluded.quests,cards=excluded.cards,
-        updated_at=CURRENT_TIMESTAMP`).bind(
-        id,p.name,p.level,p.xp,p.faction,p.victories,p.zone_id,p.exploration_count,
-        p.last_discovery,p.arena_wins,p.equipped_card_id,p.fusion_materials,p.world_threat,
-        p.world_resources,p.world_tile,p.visited_poi_ids,p.faction_states,p.quests,p.cards
-      ).run();
+      try {
+        await env.DB.prepare(`INSERT INTO players (
+          id,name,level,xp,faction,victories,zone_id,exploration_count,last_discovery,
+          arena_wins,equipped_card_id,fusion_materials,world_threat,world_resources,
+          world_tile,visited_poi_ids,faction_states,npc_memories,quests,cards,updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          name=excluded.name,level=excluded.level,xp=excluded.xp,faction=excluded.faction,
+          victories=excluded.victories,zone_id=excluded.zone_id,exploration_count=excluded.exploration_count,
+          last_discovery=excluded.last_discovery,arena_wins=excluded.arena_wins,
+          equipped_card_id=excluded.equipped_card_id,fusion_materials=excluded.fusion_materials,
+          world_threat=excluded.world_threat,world_resources=excluded.world_resources,
+          world_tile=excluded.world_tile,visited_poi_ids=excluded.visited_poi_ids,
+          faction_states=excluded.faction_states,npc_memories=excluded.npc_memories,
+          quests=excluded.quests,cards=excluded.cards,updated_at=CURRENT_TIMESTAMP`).bind(
+          id,p.name,p.level,p.xp,p.faction,p.victories,p.zone_id,p.exploration_count,
+          p.last_discovery,p.arena_wins,p.equipped_card_id,p.fusion_materials,p.world_threat,
+          p.world_resources,p.world_tile,p.visited_poi_ids,p.faction_states,p.npc_memories,p.quests,p.cards
+        ).run();
 
-      const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
-      return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
+        const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
+        return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
+      } catch {
+        return json({ error: "database_write_failed" }, 500);
+      }
     }
 
     return json({ error: "not_found" }, 404);
