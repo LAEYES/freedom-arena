@@ -1,0 +1,1 @@
+ALTER TABLE players ADD COLUMN npc_memories TEXT NOT NULL DEFAULT '[]';
