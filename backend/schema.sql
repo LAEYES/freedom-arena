@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS players (
   world_tile TEXT NOT NULL DEFAULT '{"x":0,"y":0}',
   visited_poi_ids TEXT NOT NULL DEFAULT '[]',
   faction_states TEXT NOT NULL DEFAULT '[]',
+  npc_memories TEXT NOT NULL DEFAULT '[]',
   quests TEXT NOT NULL DEFAULT '[]',
   cards TEXT NOT NULL DEFAULT '[]',
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
