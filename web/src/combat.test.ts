@@ -54,4 +54,12 @@ describe('combat system', () => {
     expect(second.momentum).toBe(2);
   });
 
+  it('applies bleed after a strong attack and weakens the enemy after heavy strike', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const first = playerAttack(encounter);
+    expect(first.enemyEffects.bleed).toBeGreaterThanOrEqual(0);
+    const heavy = playerHeavyStrike(first);
+    expect(heavy.enemyEffects.weakened).toBe(2);
+  });
+
 });
