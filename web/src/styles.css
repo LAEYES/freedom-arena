@@ -228,3 +228,116 @@ input{
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
+
+
+/* --- Tactical command polish --- */
+.header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:18px;
+}
+.header:after{
+  content:"FA // TACTICAL NETWORK";
+  position:absolute;
+  right:24px;
+  top:8px;
+  font:600 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.18em;
+  color:rgba(143,183,255,.34);
+}
+.hero{
+  isolation:isolate;
+}
+.hero:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(90deg,transparent 49.8%,rgba(143,183,255,.035) 50%,transparent 50.2%),
+    linear-gradient(0deg,transparent 49.8%,rgba(143,183,255,.025) 50%,transparent 50.2%);
+  background-size:48px 48px;
+  pointer-events:none;
+  z-index:-1;
+}
+.panel{
+  overflow:hidden;
+}
+.panel:before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  width:42px;
+  height:1px;
+  background:linear-gradient(90deg,var(--fa-blue),transparent);
+  opacity:.7;
+}
+.panel:after{
+  content:"";
+  position:absolute;
+  right:0;
+  bottom:0;
+  width:80px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--fa-line-strong));
+  opacity:.45;
+}
+.hud-layer{
+  border-color:rgba(143,183,255,.3);
+  background:
+    linear-gradient(90deg,rgba(17,29,50,.96),rgba(7,13,25,.94)),
+    repeating-linear-gradient(0deg,transparent 0 5px,rgba(143,183,255,.018) 6px);
+}
+.hud-strip{
+  gap:10px;
+}
+.hud-chip{
+  position:relative;
+  min-height:58px;
+  padding:12px 14px;
+  border-radius:10px;
+}
+.hud-chip:after{
+  content:"";
+  position:absolute;
+  top:7px;
+  right:8px;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  background:#7fa8e8;
+  box-shadow:0 0 9px rgba(127,168,232,.8);
+}
+.environment-grid article{
+  min-height:70px;
+}
+.environment-grid article span{
+  color:#d8e5fb;
+  font-weight:700;
+}
+.zone-node{
+  border-color:rgba(116,145,194,.2);
+  background:rgba(5,10,18,.76);
+}
+.zone-node.active{
+  border-color:rgba(143,183,255,.62);
+  box-shadow:0 0 20px rgba(94,137,205,.14);
+}
+.signal-actions,.scenario-choices{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
+.event-signal{
+  color:#d8bfff;
+  letter-spacing:.08em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media(max-width:760px){
+  .header{align-items:flex-start;flex-direction:column}
+  .header:after{right:14px;top:5px}
+  .hud-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hud-radar{min-height:180px}
+}
