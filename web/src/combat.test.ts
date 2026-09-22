@@ -42,7 +42,16 @@ describe('combat system', () => {
     expect(next.turn).toBe('player');
     expect(next.enemy.hp).toBeLessThan(encounter.enemy.hp);
     expect(next.heavyCooldown).toBeGreaterThan(0);
+    expect(next.momentum).toBe(0);
     expect(next.enemyStunned).toBe(true);
     expect(playerHeavyStrike(next)).toBe(next);
   });
+  it('builds momentum with attacks and releases it on heavy strike', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const first = playerAttack(encounter);
+    expect(first.momentum).toBe(1);
+    const second = playerAttack(first);
+    expect(second.momentum).toBe(2);
+  });
+
 });
