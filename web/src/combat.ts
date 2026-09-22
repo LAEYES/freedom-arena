@@ -1,5 +1,5 @@
 export type Combatant={id:string;name:string;level:number;maxHp:number;hp:number;attack:number;defense:number};
-export type CombatState={player:Combatant;enemy:Combatant;turn:'player'|'enemy';status:'active'|'victory'|'defeat';log:string[]};
+export type CombatState={player:Combatant;enemy:Combatant;turn:'player'|'enemy';status:'active'|'victory'|'defeat';log:string[];guarding:boolean;heavyCooldown:number};
 export type CombatBonuses={power?:number;defense?:number;vitality?:number;threat?:number;faction?:string;encounterChance?:number};
 export function createEncounter(playerLevel:number,zoneLevel:number,bonuses:CombatBonuses={}):CombatState{
  const level=Math.max(1,zoneLevel+Math.floor((Math.max(1,bonuses.threat??1)-1)/2)),power=Math.max(0,bonuses.power??0),defense=Math.max(0,bonuses.defense??0),vitality=Math.max(0,bonuses.vitality??0);
@@ -8,7 +8,7 @@ export function createEncounter(playerLevel:number,zoneLevel:number,bonuses:Comb
  const names:Record<string,string>={Aegis:'Aegis Sentinel',Nomads:'Nomad Raider',Eclipse:'Eclipse Warden'};
  const encounterBoost=Math.max(0,Math.floor((bonuses.encounterChance??15)/30));
  const enemy:Combatant={id:'enemy',name:names[faction]??'Frontier Scout',level,maxHp:70+level*15+encounterBoost*8,hp:70+level*15+encounterBoost*8,attack:9+level*3+encounterBoost,defense:4+level+Math.floor(encounterBoost/2)};
- return {player,enemy,turn:'player',status:'active',log:[`Encounter: ${enemy.name}`]};
+ return {player,enemy,turn:'player',status:'active',log:[`Encounter: ${enemy.name}`],guarding:false,heavyCooldown:0};
 }
 function damage(attack:number,defense:number):number{return Math.max(1,attack-Math.floor(defense*.6));}
 export function playerAttack(state:CombatState):CombatState{
@@ -20,7 +20,7 @@ export function playerAttack(state:CombatState):CombatState{
 function enemyTurn(state:CombatState):CombatState{
  const dealt=damage(state.enemy.attack,state.player.defense),playerHp=Math.max(0,state.player.hp-dealt);
  if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',log:[...state.log,`${state.enemy.name} deals ${dealt} damage. Defeat.`]};
- return {...state,player:{...state.player,hp:playerHp},turn:'player',log:[...state.log,`${state.enemy.name} deals ${dealt} damage.`]};
+ return {...state,player:{...state.player,hp:playerHp},turn:'player',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog}`]};
 }
 export function getCombatReward(state:CombatState):number{return state.status==='victory'?25+state.enemy.level*10:0;}
 
@@ -32,3 +32,5 @@ export function getCombatSummary(state:CombatState):{rounds:number;damageTaken:n
  const rounds=state.log.filter(entry=>entry.startsWith('You deal ')).length;
  return {rounds,damageTaken,damageDealt};
 }
+
+export function playerGuard(state:CombatState):CombatState{\n if(state.status!=='active'||state.turn!=='player')return state;\n return enemyTurn({...state,turn:'enemy',guarding:true,log:[...state.log,'You brace for the next attack.']});\n}\n\nexport function playerHeavyStrike(state:CombatState):CombatState{\n if(state.status!=='active'||state.turn!=='player'||state.heavyCooldown>0)return state;\n const dealt=Math.max(2,damage(state.player.attack+8,state.enemy.defense));\n const enemyHp=Math.max(0,state.enemy.hp-dealt);\n if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};\n return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});\n}\n
