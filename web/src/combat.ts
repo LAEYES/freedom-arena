@@ -1,5 +1,5 @@
 export type Combatant={id:string;name:string;level:number;maxHp:number;hp:number;attack:number;defense:number};
-export type CombatState={player:Combatant;enemy:Combatant;turn:'player'|'enemy';status:'active'|'victory'|'defeat';log:string[];guarding:boolean;heavyCooldown:number;enemyStunned:boolean};
+export type CombatState={player:Combatant;enemy:Combatant;turn:'player'|'enemy';status:'active'|'victory'|'defeat';log:string[];guarding:boolean;heavyCooldown:number;enemyStunned:boolean;momentum:number};
 export type CombatBonuses={power?:number;defense?:number;vitality?:number;threat?:number;faction?:string;encounterChance?:number};
 export function createEncounter(playerLevel:number,zoneLevel:number,bonuses:CombatBonuses={}):CombatState{
  const level=Math.max(1,zoneLevel+Math.floor((Math.max(1,bonuses.threat??1)-1)/2)),power=Math.max(0,bonuses.power??0),defense=Math.max(0,bonuses.defense??0),vitality=Math.max(0,bonuses.vitality??0);
@@ -8,15 +8,18 @@ export function createEncounter(playerLevel:number,zoneLevel:number,bonuses:Comb
  const names:Record<string,string>={Aegis:'Aegis Sentinel',Nomads:'Nomad Raider',Eclipse:'Eclipse Warden'};
  const encounterBoost=Math.max(0,Math.floor((bonuses.encounterChance??15)/30));
  const enemy:Combatant={id:'enemy',name:names[faction]??'Frontier Scout',level,maxHp:70+level*15+encounterBoost*8,hp:70+level*15+encounterBoost*8,attack:9+level*3+encounterBoost,defense:4+level+Math.floor(encounterBoost/2)};
- return {player,enemy,turn:'player',status:'active',log:[`Encounter: ${enemy.name}`],guarding:false,heavyCooldown:0,enemyStunned:false};
+ return {player,enemy,turn:'player',status:'active',log:[`Encounter: ${enemy.name}`],guarding:false,heavyCooldown:0,enemyStunned:false,momentum:0};
 }
 function damage(attack:number,defense:number):number{return Math.max(1,attack-Math.floor(defense*.6));}
 export function playerAttack(state:CombatState):CombatState{
  if(state.status!=='active'||state.turn!=='player')return state;
- const dealt=damage(state.player.attack,state.enemy.defense),enemyHp=Math.max(0,state.enemy.hp-dealt);
- if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',log:[...state.log,`You deal ${dealt} damage. Victory!`]};
- return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',log:[...state.log,`You deal ${dealt} damage.`]});
+ const bonus=state.momentum>=2?2:state.momentum;
+ const dealt=damage(state.player.attack+bonus,state.enemy.defense),enemyHp=Math.max(0,state.enemy.hp-dealt);
+ const nextMomentum=Math.min(3,state.momentum+1);
+ if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',momentum:nextMomentum,log:[...state.log,'You deal '+dealt+' damage.'+(bonus>0?' Momentum +'+bonus+'.':'')+' Victory!']};
+ return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',momentum:nextMomentum,enemyStunned:false,log:[...state.log,'You deal '+dealt+' damage.'+(bonus>0?' Momentum +'+bonus+'.':'')]});
 }
+
 function enemyTurn(state:CombatState):CombatState{
  const base=damage(state.enemy.attack,state.player.defense);
  const dealt=state.guarding?Math.max(1,Math.floor(base*.5)):base;
@@ -38,15 +41,16 @@ export function getCombatSummary(state:CombatState):{rounds:number;damageTaken:n
 
 export function playerGuard(state:CombatState):CombatState{
  if(state.status!=='active'||state.turn!=='player')return state;
- return enemyTurn({...state,turn:'enemy',guarding:true,log:[...state.log,'You brace for the next attack.']});
+ return enemyTurn({...state,turn:'enemy',guarding:true,momentum:0,log:[...state.log,'You brace for the next attack. Momentum reset.']});
 }
 
 export function playerHeavyStrike(state:CombatState):CombatState{
  if(state.status!=='active'||state.turn!=='player'||state.heavyCooldown>0)return state;
- const dealt=Math.max(2,damage(state.player.attack+8,state.enemy.defense));
+ const momentumBonus=Math.min(6,state.momentum*2);
+ const dealt=Math.max(2,damage(state.player.attack+8+momentumBonus,state.enemy.defense));
  const enemyHp=Math.max(0,state.enemy.hp-dealt);
- if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,enemyStunned:false,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};
+ if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,enemyStunned:false,momentum:0,log:[...state.log,'Heavy strike deals '+dealt+' damage. Momentum released: '+momentumBonus+'. Victory!']};
  const stunned=dealt>=Math.max(1,Math.floor(state.enemy.maxHp*.25));
- if(stunned)return {...state,enemy:{...state.enemy,hp:enemyHp},turn:'player',guarding:false,heavyCooldown:2,enemyStunned:true,log:[...state.log,'Heavy strike deals '+dealt+' damage. Enemy staggered — you keep initiative.']};
- return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,enemyStunned:false,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});
+ if(stunned)return {...state,enemy:{...state.enemy,hp:enemyHp},turn:'player',guarding:false,heavyCooldown:2,enemyStunned:true,momentum:0,log:[...state.log,'Heavy strike deals '+dealt+' damage. Momentum released: '+momentumBonus+'. Enemy staggered — you keep initiative.']};
+ return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,enemyStunned:false,momentum:0,log:[...state.log,'Heavy strike deals '+dealt+' damage. Momentum released: '+momentumBonus+'.']});
 }
