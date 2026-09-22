@@ -45,6 +45,8 @@ export function playerHeavyStrike(state:CombatState):CombatState{
  if(state.status!=='active'||state.turn!=='player'||state.heavyCooldown>0)return state;
  const dealt=Math.max(2,damage(state.player.attack+8,state.enemy.defense));
  const enemyHp=Math.max(0,state.enemy.hp-dealt);
- if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};
- return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});
+ if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,enemyStunned:false,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};
+ const stunned=dealt>=Math.max(1,Math.floor(state.enemy.maxHp*.25));
+ if(stunned)return {...state,enemy:{...state.enemy,hp:enemyHp},turn:'player',guarding:false,heavyCooldown:2,enemyStunned:true,log:[...state.log,'Heavy strike deals '+dealt+' damage. Enemy staggered — you keep initiative.']};
+ return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,enemyStunned:false,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});
 }
