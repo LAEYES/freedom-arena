@@ -35,29 +35,29 @@ type CategorySpec = {
 
 /** Canonical catalogue recovered from the supplied preview sheets. */
 export const TILE_CATEGORIES: readonly CategorySpec[] = [
-  { code: '01', category: 'GROUND',         count: 16, label: 'Ground',           paintable: true },
-  { code: '02', category: 'PATHS',          count: 16, label: 'Paths',            paintable: true },
-  { code: '03', category: 'BORDERS',        count: 16, label: 'Borders',          paintable: true },
-  { code: '04', category: 'TRANSITIONS',    count: 16, label: 'Transitions',      paintable: true },
-  { code: '05', category: 'WALLS',          count: 16, label: 'Walls',            paintable: true },
-  { code: '06', category: 'PLATFORMS',      count: 16, label: 'Platforms',        paintable: true },
-  { code: '07', category: 'NATURE',         count: 16, label: 'Nature',           paintable: false },
-  { code: '08', category: 'WATER',          count: 16, label: 'Water',            paintable: true },
-  { code: '09', category: 'LAVA_ENERGY',    count: 16, label: 'Lava / Energy',    paintable: true },
-  { code: '10', category: 'SNOW_ICE',       count: 16, label: 'Snow / Ice',       paintable: true },
-  { code: '11', category: 'DESERT',         count: 16, label: 'Desert',           paintable: true },
-  { code: '12', category: 'DUNGEON',        count: 16, label: 'Dungeon',          paintable: true },
-  { code: '13', category: 'TECH',           count: 16, label: 'Tech',             paintable: false },
-  { code: '14', category: 'BUILDINGS',      count: 16, label: 'Buildings',        paintable: false },
-  { code: '15', category: 'DECORATIONS',    count: 16, label: 'Decorations',      paintable: false },
-  { code: '16', category: 'OBSTACLES',      count: 16, label: 'Obstacles',        paintable: false },
-  { code: '17', category: 'SPAWN',          count: 16, label: 'Spawn',            paintable: false },
-  { code: '18', category: 'INTERACTIVES',   count: 16, label: 'Interactives',     paintable: false },
-  { code: '19', category: 'COMBAT',         count: 16, label: 'Combat',           paintable: false },
-  { code: '20', category: 'TELEPORTERS',    count: 16, label: 'Teleporters',      paintable: false },
-  { code: '21', category: 'OBJECTIVES',     count: 16, label: 'Objectives',       paintable: false },
-  { code: '22', category: 'ITEMS',          count: 16, label: 'Items',            paintable: false },
-  { code: '23', category: 'UI_ICONS',       count: 16, label: 'UI Icons',         paintable: false },
+  { code: '01', category: 'GROUND', count: 16, label: 'Ground', paintable: true },
+  { code: '02', category: 'PATHS', count: 16, label: 'Paths', paintable: true },
+  { code: '03', category: 'BORDERS', count: 16, label: 'Borders', paintable: true },
+  { code: '04', category: 'TRANSITIONS', count: 16, label: 'Transitions', paintable: true },
+  { code: '05', category: 'WALLS', count: 16, label: 'Walls', paintable: true },
+  { code: '06', category: 'PLATFORMS', count: 16, label: 'Platforms', paintable: true },
+  { code: '07', category: 'NATURE', count: 16, label: 'Nature', paintable: false },
+  { code: '08', category: 'WATER', count: 16, label: 'Water', paintable: true },
+  { code: '09', category: 'LAVA_ENERGY', count: 16, label: 'Lava / Energy', paintable: true },
+  { code: '10', category: 'SNOW_ICE', count: 16, label: 'Snow / Ice', paintable: true },
+  { code: '11', category: 'DESERT', count: 16, label: 'Desert', paintable: true },
+  { code: '12', category: 'DUNGEON', count: 16, label: 'Dungeon', paintable: true },
+  { code: '13', category: 'TECH', count: 16, label: 'Tech', paintable: false },
+  { code: '14', category: 'BUILDINGS', count: 16, label: 'Buildings', paintable: false },
+  { code: '15', category: 'DECORATIONS', count: 16, label: 'Decorations', paintable: false },
+  { code: '16', category: 'OBSTACLES', count: 16, label: 'Obstacles', paintable: false },
+  { code: '17', category: 'SPAWN', count: 16, label: 'Spawn', paintable: false },
+  { code: '18', category: 'INTERACTIVES', count: 16, label: 'Interactives', paintable: false },
+  { code: '19', category: 'COMBAT', count: 16, label: 'Combat', paintable: false },
+  { code: '20', category: 'TELEPORTERS', count: 16, label: 'Teleporters', paintable: false },
+  { code: '21', category: 'OBJECTIVES', count: 16, label: 'Objectives', paintable: false },
+  { code: '22', category: 'ITEMS', count: 16, label: 'Items', paintable: false },
+  { code: '23', category: 'UI_ICONS', count: 16, label: 'UI Icons', paintable: false },
   { code: '24', category: 'CHARACTERS_NPC', count: 16, label: 'Characters / NPC', paintable: false },
 ] as const;
 
@@ -82,10 +82,14 @@ export const TILE_BY_ID: Readonly<Record<string, TileDefinition>> = Object.fromE
   TILE_REGISTRY.map((tile) => [tile.id, tile]),
 );
 
-export const TILES_BY_CATEGORY: Readonly<Record<TileCategory, readonly TileDefinition[]>> =
-  Object.fromEntries(
-    TILE_CATEGORIES.map((spec) => [spec.category, TILE_REGISTRY.filter((tile) => tile.category === spec.category)]),
-  ) as Record<TileCategory, readonly TileDefinition[]>;
+// Object.fromEntries loses the key union at the type level. Build the map
+// explicitly so strict TypeScript can prove every TileCategory is present.
+const tilesByCategory = {} as Record<TileCategory, TileDefinition[]>;
+for (const spec of TILE_CATEGORIES) {
+  tilesByCategory[spec.category] = TILE_REGISTRY.filter((tile) => tile.category === spec.category);
+}
+
+export const TILES_BY_CATEGORY: Readonly<Record<TileCategory, readonly TileDefinition[]>> = tilesByCategory;
 
 export function getTileDefinition(id: string): TileDefinition | undefined {
   return TILE_BY_ID[id];
