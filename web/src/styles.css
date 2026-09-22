@@ -809,3 +809,237 @@ button:hover:not(:disabled),button.selected{
   .actions{padding:8px}
   .actions button{flex:1 1 calc(50% - 8px)}
 }
+
+
+/* =========================================================
+   FREEDOM ARENA — COMMAND DECK v0.5
+   Stronger game identity: tactical RPG / expedition console.
+   ========================================================= */
+:root{
+  --fa-ink:#02050a;
+  --fa-glass:rgba(8,14,24,.82);
+  --fa-grid:rgba(141,178,232,.055);
+  --fa-cyan:#8fd4ff;
+  --fa-mint:#82e3bc;
+  --fa-amber:#f0ce82;
+}
+
+body{
+  background:
+    radial-gradient(1100px 560px at 50% -180px,rgba(72,137,205,.24),transparent 68%),
+    radial-gradient(700px 700px at -10% 45%,rgba(53,108,166,.10),transparent 70%),
+    linear-gradient(180deg,#050914 0%,#02050a 72%,#010307 100%);
+}
+
+.shell{
+  max-width:1520px;
+}
+
+.header{
+  align-items:center;
+  min-height:86px;
+  border-bottom:1px solid rgba(143,196,255,.16);
+}
+
+.header h1{
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:-.065em;
+}
+
+.header .eyebrow{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--fa-cyan);
+}
+
+.status{
+  position:relative;
+  padding-left:28px;
+  border-color:rgba(130,227,188,.28);
+  color:#bdeed9;
+}
+
+.status:before{
+  content:"";
+  position:absolute;
+  left:11px;
+  top:50%;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  transform:translateY(-50%);
+  background:var(--fa-mint);
+  box-shadow:0 0 12px rgba(130,227,188,.9);
+}
+
+.hero{
+  border-color:rgba(143,196,255,.20);
+  background:
+    linear-gradient(110deg,rgba(12,28,47,.98),rgba(5,10,18,.96) 68%),
+    radial-gradient(circle at 85% 40%,rgba(143,212,255,.15),transparent 32%);
+}
+
+.hero h2{
+  text-transform:uppercase;
+  letter-spacing:-.04em;
+}
+
+.hero .eyebrow:after{
+  content:"  //  EXPEDITION READY";
+  color:rgba(143,212,255,.42);
+}
+
+.panel{
+  border-color:rgba(143,196,255,.15);
+  background:
+    linear-gradient(145deg,rgba(10,18,30,.96),rgba(3,7,13,.97));
+}
+
+.panel>div>h2{
+  text-transform:uppercase;
+  letter-spacing:-.035em;
+}
+
+.panel>div>h2:before{
+  content:"▸";
+  display:inline-block;
+  margin-right:8px;
+  color:var(--fa-cyan);
+  font-size:.7em;
+  transform:translateY(-1px);
+}
+
+.actions{
+  background:
+    linear-gradient(180deg,rgba(9,17,29,.78),rgba(2,6,12,.78));
+  border-color:rgba(143,196,255,.15);
+}
+
+.actions button{
+  position:relative;
+  overflow:hidden;
+  font-weight:750;
+}
+
+.actions button:after{
+  content:"";
+  position:absolute;
+  left:-30%;
+  right:-30%;
+  bottom:-1px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--fa-cyan),transparent);
+  opacity:0;
+  transition:opacity .15s ease;
+}
+
+.actions button:hover:not(:disabled):after{
+  opacity:.65;
+}
+
+.world-map{
+  border-color:rgba(143,196,255,.20);
+  background:
+    linear-gradient(var(--fa-grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--fa-grid) 1px,transparent 1px),
+    radial-gradient(circle at 50% 48%,rgba(43,93,145,.25),transparent 44%),
+    linear-gradient(145deg,#07111e,#02060c);
+  background-size:32px 32px,32px 32px,auto,auto;
+}
+
+.world-map:before{
+  opacity:.18;
+  box-shadow:0 -80px 0 rgba(143,212,255,.7),0 80px 0 rgba(143,212,255,.7);
+}
+
+.zone-node{
+  box-shadow:0 10px 25px rgba(0,0,0,.3);
+  border-color:rgba(143,196,255,.20);
+}
+
+.zone-node.active{
+  border-color:rgba(143,212,255,.72);
+  background:linear-gradient(145deg,rgba(19,44,69,.96),rgba(7,16,28,.96));
+}
+
+.hud-layer{
+  border-color:rgba(143,212,255,.28);
+  box-shadow:0 18px 45px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.hud-chip{
+  border-color:rgba(143,196,255,.16);
+  background:rgba(3,9,17,.78);
+}
+
+.hud-chip b{
+  color:rgba(143,212,255,.55);
+}
+
+.combat-telemetry{
+  border-color:rgba(143,212,255,.20);
+  color:#b9dcff;
+  box-shadow:inset 0 0 20px rgba(65,137,194,.05);
+}
+
+.cards article{
+  background:
+    linear-gradient(145deg,rgba(17,31,50,.92),rgba(4,9,16,.96));
+}
+
+.cards article strong{
+  text-transform:uppercase;
+  letter-spacing:.025em;
+}
+
+.cards article.card-equipped{
+  background:
+    linear-gradient(145deg,rgba(48,39,20,.42),rgba(7,12,20,.96));
+  border-color:rgba(240,206,130,.68);
+}
+
+.cards article.card-equipped:after{
+  content:"ACTIVE LOADOUT";
+  position:absolute;
+  left:12px;
+  bottom:10px;
+  color:rgba(240,206,130,.58);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.16em;
+}
+
+.quest-progress{
+  height:8px;
+}
+
+.quest-progress i{
+  box-shadow:0 0 14px rgba(143,196,255,.24);
+}
+
+.faction-state{
+  background:linear-gradient(145deg,rgba(12,22,37,.85),rgba(4,9,16,.85));
+}
+
+.environment-grid article{
+  background:linear-gradient(145deg,rgba(10,20,33,.82),rgba(3,8,14,.86));
+}
+
+input:focus{
+  border-color:rgba(143,212,255,.65);
+  box-shadow:0 0 0 3px rgba(143,212,255,.07);
+}
+
+@media(max-width:620px){
+  .header{
+    min-height:68px;
+  }
+  .header:after{
+    display:none;
+  }
+  .hero .eyebrow:after{
+    content:"";
+  }
+  .world-map{
+    background-size:24px 24px,24px 24px,auto,auto;
+  }
+}
