@@ -341,3 +341,173 @@ input{
   .hud-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hud-radar{min-height:180px}
 }
+
+
+
+/* --- Tactical HUD v0.2: command surfaces --- */
+:focus-visible{
+  outline:2px solid rgba(143,183,255,.8);
+  outline-offset:2px;
+}
+
+.actions{
+  position:relative;
+  padding:8px;
+  margin:14px -2px 0;
+  border:1px solid rgba(116,145,194,.13);
+  border-radius:12px;
+  background:rgba(3,7,14,.34);
+}
+
+.actions:before{
+  content:"COMMAND";
+  position:absolute;
+  left:10px;
+  top:-7px;
+  padding:0 6px;
+  background:#0a111f;
+  color:rgba(158,180,216,.5);
+  font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.16em;
+}
+
+.actions button{
+  min-height:38px;
+}
+
+.panel .actions button:first-child:not(:disabled){
+  background:linear-gradient(180deg,rgba(39,64,101,.95),rgba(18,32,54,.95));
+}
+
+.panel .actions button:last-child:not(:disabled){
+  border-color:rgba(143,183,255,.25);
+}
+
+.world-canvas-layer{
+  border:1px solid rgba(116,145,194,.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.015),
+    inset 0 0 55px rgba(0,0,0,.35);
+}
+
+.world-canvas-layer:before,
+.world-canvas-layer:after{
+  content:"";
+  position:absolute;
+  z-index:4;
+  width:18px;
+  height:18px;
+  pointer-events:none;
+  opacity:.65;
+}
+
+.world-canvas-layer:before{
+  left:8px;
+  top:8px;
+  border-left:1px solid var(--fa-blue);
+  border-top:1px solid var(--fa-blue);
+}
+
+.world-canvas-layer:after{
+  right:8px;
+  bottom:8px;
+  border-right:1px solid var(--fa-blue);
+  border-bottom:1px solid var(--fa-blue);
+}
+
+.tile-canvas{
+  image-rendering:pixelated;
+}
+
+.zone-info{
+  position:relative;
+}
+
+.zone-info:before{
+  content:"ZONE TELEMETRY";
+  display:block;
+  margin-bottom:8px;
+  color:rgba(158,180,216,.46);
+  font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.18em;
+}
+
+.environment-grid article{
+  position:relative;
+  overflow:hidden;
+}
+
+.environment-grid article:after{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:35%;
+  height:1px;
+  background:linear-gradient(90deg,rgba(143,183,255,.45),transparent);
+}
+
+.faction-state{
+  transition:border-color .15s ease,transform .15s ease,background .15s ease;
+}
+
+.faction-state:hover{
+  transform:translateY(-1px);
+  border-color:rgba(143,183,255,.34);
+  background:rgba(10,18,32,.9);
+}
+
+.quest{
+  position:relative;
+  overflow:hidden;
+}
+
+.quest:before{
+  content:"OBJECTIVE";
+  color:rgba(158,180,216,.38);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.15em;
+}
+
+.quest.completed:before{
+  content:"OBJECTIVE // COMPLETE";
+  color:rgba(230,199,125,.62);
+}
+
+.cards article{
+  position:relative;
+  overflow:hidden;
+}
+
+.cards article:before{
+  content:"RPGQG";
+  position:absolute;
+  right:10px;
+  top:9px;
+  color:rgba(158,180,216,.2);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.14em;
+}
+
+.cards article.card-equipped:before{
+  content:"EQUIPPED";
+  color:rgba(230,199,125,.65);
+}
+
+@media(max-width:760px){
+  .actions{
+    margin-top:12px;
+    padding:9px;
+  }
+
+  .actions button{
+    flex:1 1 calc(50% - 8px);
+    min-width:120px;
+  }
+
+  .world-canvas-layer:before,
+  .world-canvas-layer:after{
+    width:13px;
+    height:13px;
+  }
+}
