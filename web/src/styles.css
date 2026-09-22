@@ -563,3 +563,12 @@ button:disabled{filter:saturate(.55);}
   .world-canvas-layer,.world-map{min-height:300px;}
   .hud-layer{padding-bottom:calc(16px + env(safe-area-inset-bottom));}
 }
+
+
+/* --- World map signal legend --- */
+.world-legend{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;flex-wrap:wrap;gap:6px;padding:7px 8px;border:1px solid rgba(116,145,194,.24);border-radius:9px;background:rgba(4,8,15,.78);backdrop-filter:blur(8px);font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:rgba(216,229,251,.72)}
+.world-legend span{display:inline-flex;align-items:center;gap:5px;padding:3px 5px}
+.legend-dot{display:inline-block;width:6px;height:6px;border-radius:50%;box-shadow:0 0 7px currentColor}
+.legend-poi{color:#d8b56a;background:currentColor}.legend-npc{color:#9db4e8;background:currentColor}.legend-event{color:#ad8ee8;background:currentColor}
+.legend-line{display:inline-block;width:11px;height:2px;background:#d8b56a;box-shadow:0 0 6px rgba(216,181,106,.5)}
+@media(max-width:760px){.world-legend{left:8px;right:8px;bottom:8px;justify-content:center}.world-legend span{padding:4px 5px}}
