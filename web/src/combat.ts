@@ -18,8 +18,11 @@ export function playerAttack(state:CombatState):CombatState{
  return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',log:[...state.log,`You deal ${dealt} damage.`]});
 }
 function enemyTurn(state:CombatState):CombatState{
- const dealt=damage(state.enemy.attack,state.player.defense),playerHp=Math.max(0,state.player.hp-dealt);
- if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',log:[...state.log,`${state.enemy.name} deals ${dealt} damage. Defeat.`]};
+ const base=damage(state.enemy.attack,state.player.defense);
+ const dealt=state.guarding?Math.max(1,Math.floor(base*.5)):base;
+ const guardLog=state.guarding?' Guard absorbs part of the impact.':'';
+ const playerHp=Math.max(0,state.player.hp-dealt);
+ if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog} Defeat.`]};
  return {...state,player:{...state.player,hp:playerHp},turn:'player',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog}`]};
 }
 export function getCombatReward(state:CombatState):number{return state.status==='victory'?25+state.enemy.level*10:0;}
@@ -33,4 +36,15 @@ export function getCombatSummary(state:CombatState):{rounds:number;damageTaken:n
  return {rounds,damageTaken,damageDealt};
 }
 
-export function playerGuard(state:CombatState):CombatState{\n if(state.status!=='active'||state.turn!=='player')return state;\n return enemyTurn({...state,turn:'enemy',guarding:true,log:[...state.log,'You brace for the next attack.']});\n}\n\nexport function playerHeavyStrike(state:CombatState):CombatState{\n if(state.status!=='active'||state.turn!=='player'||state.heavyCooldown>0)return state;\n const dealt=Math.max(2,damage(state.player.attack+8,state.enemy.defense));\n const enemyHp=Math.max(0,state.enemy.hp-dealt);\n if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};\n return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});\n}\n
+export function playerGuard(state:CombatState):CombatState{
+ if(state.status!=='active'||state.turn!=='player')return state;
+ return enemyTurn({...state,turn:'enemy',guarding:true,log:[...state.log,'You brace for the next attack.']});
+}
+
+export function playerHeavyStrike(state:CombatState):CombatState{
+ if(state.status!=='active'||state.turn!=='player'||state.heavyCooldown>0)return state;
+ const dealt=Math.max(2,damage(state.player.attack+8,state.enemy.defense));
+ const enemyHp=Math.max(0,state.enemy.hp-dealt);
+ if(enemyHp===0)return {...state,enemy:{...state.enemy,hp:0},status:'victory',heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage. Victory!']};
+ return enemyTurn({...state,enemy:{...state.enemy,hp:enemyHp},turn:'enemy',guarding:false,heavyCooldown:2,log:[...state.log,'Heavy strike deals '+dealt+' damage.']});
+}
