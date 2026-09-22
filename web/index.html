@@ -21,7 +21,7 @@
       });
     </script>
     <script type="module">
-      if (location.hostname === 'localhost' && location.port === '7700') {
+      if (location.hostname === 'localhost' && (location.port === '7700' || location.port === '6700')) {
         var root = document.getElementById('root');
         if (root) root.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;padding:28px;background:#070b13;color:#dce7ff;font-family:system-ui,sans-serif;text-align:center"><div style="max-width:680px"><h1 style="font-size:clamp(30px,7vw,54px);margin:0 0 16px">Freedom Arena</h1><h2 style="color:#ffd7d7">SPCK utilise l’aperçu statique</h2><p>Le jeu doit être lancé avec Vite pour transformer <code>src/main.tsx</code> en JavaScript.</p><pre style="text-align:left;padding:16px;overflow:auto;background:#111827;border-radius:12px">cd web\\nnpm install\\nnpm run spck</pre><p>Ensuite ouvre <strong>http://localhost:5173/</strong> dans l’aperçu SPCK.</p><p style="opacity:.7">Ne lance pas directement <code>web/index.html</code> avec le serveur :7700.</p></div></div>';
       } else {
