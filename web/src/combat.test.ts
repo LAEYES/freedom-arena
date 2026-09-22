@@ -42,6 +42,7 @@ describe('combat system', () => {
     expect(next.turn).toBe('player');
     expect(next.enemy.hp).toBeLessThan(encounter.enemy.hp);
     expect(next.heavyCooldown).toBeGreaterThan(0);
+    expect(next.enemyStunned).toBe(true);
     expect(playerHeavyStrike(next)).toBe(next);
   });
 });
