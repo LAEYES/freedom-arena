@@ -44,7 +44,7 @@ function enemyTurn(state:CombatState):CombatState{
  const guardLog=state.guarding?' Guard absorbs part of the impact.':'';
  const playerHp=Math.max(0,state.player.hp-dealt);
  if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),enemyEffects:nextEnemyEffects,playerEffects:{...state.playerEffects},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog} Defeat.`]};
- return {...state,player:{...state.player,hp:playerHp},turn:'player',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),playerEffects:{...state.playerEffects,weakened:Math.max(0,(state.playerEffects.weakened??0)-1)},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog}`]};
+ return {...state,player:{...state.player,hp:playerHp},turn:'player',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),enemyEffects:nextEnemyEffects,playerEffects:{...state.playerEffects},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog}`]};
 }
 export function getCombatReward(state:CombatState):number{return state.status==='victory'?25+state.enemy.level*10:0;}
 
