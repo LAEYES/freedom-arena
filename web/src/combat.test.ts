@@ -62,4 +62,13 @@ describe('combat system', () => {
     expect(heavy.enemyEffects.weakened).toBe(2);
   });
 
+  it('expires weakened after each enemy turn', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const weakened = { ...encounter, enemyEffects: { ...encounter.enemyEffects, weakened: 2 } };
+    const afterFirstTurn = playerGuard(weakened);
+    expect(afterFirstTurn.enemyEffects.weakened).toBe(1);
+    const afterSecondTurn = playerGuard(afterFirstTurn);
+    expect(afterSecondTurn.enemyEffects.weakened).toBe(0);
+  });
+
 });
