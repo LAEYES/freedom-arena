@@ -511,3 +511,56 @@ input{
     height:13px;
   }
 }
+
+
+/* --- Tactical presentation v0.3: viewport + scanline layer --- */
+html,body,#root{min-height:100%;}
+body{overflow-x:hidden;}
+
+.world-canvas-layer:global{} 
+.world-canvas-layer{
+  isolation:isolate;
+  background:#050a13;
+}
+.world-canvas-layer > .tile-canvas{
+  filter:saturate(.9) contrast(1.04);
+}
+.world-canvas-layer::marker{display:none;}
+.world-canvas-layer .tile-canvas-dynamic{z-index:2;}
+
+/* A restrained CRT/tactical scan layer that sits above the map but below controls. */
+.world-canvas-layer::before{
+  box-shadow:inset 0 0 0 9999px rgba(4,8,15,.015);
+  background:
+    repeating-linear-gradient(0deg,transparent 0 3px,rgba(143,183,255,.018) 4px),
+    linear-gradient(135deg,rgba(143,183,255,.035),transparent 38%,rgba(182,154,255,.025));
+  width:100%;height:100%;left:0;top:0;right:auto;bottom:auto;
+  border:0;
+  opacity:.7;
+  z-index:3;
+}
+.world-canvas-layer::after{
+  width:18px;height:18px;right:8px;bottom:8px;
+  border-right:1px solid var(--fa-blue);border-bottom:1px solid var(--fa-blue);
+  z-index:5;
+  background:transparent;
+}
+
+.panel h2::after{
+  content:"";
+  display:inline-block;
+  width:22px;
+  height:1px;
+  margin:0 0 5px 8px;
+  background:linear-gradient(90deg,var(--fa-blue),transparent);
+  opacity:.55;
+}
+
+.actions button:active:not(:disabled){transform:translateY(1px);}
+button:disabled{filter:saturate(.55);}
+
+@media(max-width:760px){
+  .shell{padding-bottom:calc(20px + env(safe-area-inset-bottom));}
+  .world-canvas-layer,.world-map{min-height:300px;}
+  .hud-layer{padding-bottom:calc(16px + env(safe-area-inset-bottom));}
+}
