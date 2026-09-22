@@ -21,5 +21,14 @@
       });
     </script>
     <script type="module" src="./src/main.tsx"></script>
+    <script>
+      window.setTimeout(function () {
+        if (document.documentElement.dataset.freedomArenaBooted === 'true') return;
+        var root = document.getElementById('root');
+        if (!root || !document.getElementById('startup-status')) return;
+        var url = new URL('./src/main.tsx', document.baseURI).href;
+        root.innerHTML = '<div style="min-height:100vh;display:grid;place-items:center;padding:24px;background:#070b13;color:#ffd7d7;font-family:system-ui,sans-serif;text-align:center"><div><h1>Freedom Arena — module non démarré</h1><p>Le bundle JavaScript n\'a pas terminé son démarrage.</p><p style="opacity:.7;word-break:break-all">Entrée: ' + url + '</p><p style="opacity:.7">Recharge forcée : Ctrl+F5 ou vider le cache du site.</p></div></div>';
+      }, 5000);
+    </script>
   </body>
 </html>
