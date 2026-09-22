@@ -12,6 +12,8 @@ import { equipCard, factions, fuseCards, getCardFusionCost, getÉquiperpedCard, 
 
 function isFreshRemotePresence(entry: ZonePresence) { return Date.now() - entry.updatedAt <= 15000; }
 
+const RENDER_TILE_SIZE = 64 as const;
+
 function WorldCanvas({ zoneId, waypoint, worldTile, worldMenace, worldResources, explorationCount, factionInfluence, worldEvent, worldEventAge, remotePlayers, onTileMove, onSignalSelect }: { zoneId: string; waypoint: {x:number;y:number}|null; worldCase : {x:number;y:number}; worldMenace: number; worldResources: number; explorationCount: number; factionInfluence: number; worldEvent: import('./world').WorldEvent; worldEventAge: number; remotePlayers: ZonePresence[]; onTileMove: (tileX: number, tileY: number) => void; onSignalSelect: (signal: {type:'poi'|'npc'|'event'; name:string; x:number; y:number}) => void }) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const dynamicRef = useRef<HTMLCanvasElement>(null);
