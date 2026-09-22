@@ -22,27 +22,21 @@ describe('combat system', () => {
 
   it('calculates rewards and positive performance for a victory', () => {
     const encounter = createEncounter(20, 1, { faction: 'Aegis' });
-    const victory = {
-      ...encounter,
-      status: 'victory' as const,
-      enemy: { ...encounter.enemy, hp: 0 },
-    };
+    const victory = { ...encounter, status: 'victory' as const, enemy: { ...encounter.enemy, hp: 0 } };
     expect(getCombatReward(victory)).toBeGreaterThan(0);
     expect(getCombatPerformance(victory)).toBeGreaterThan(0);
   });
-});
 
   it('guard reduces the next incoming damage', () => {
     const encounter = createEncounter(5, 1, { faction: 'Aegis' });
     const guarded = playerGuard(encounter);
     expect(guarded.turn).toBe('player');
     expect(guarded.player.hp).toBeGreaterThan(0);
-    expect(encounter.player.hp - guarded.player.hp).toBeLessThan(
-      encounter.enemy.attack - Math.floor(encounter.player.defense * 0.6)
-    );
+    const normalDamage = encounter.enemy.attack - Math.floor(encounter.player.defense * 0.6);
+    expect(encounter.player.hp - guarded.player.hp).toBeLessThan(normalDamage);
   });
 
-  it('heavy strike consumes a turn and starts a cooldown', () => {
+  it('heavy strike deals damage and starts a cooldown', () => {
     const encounter = createEncounter(10, 1, { faction: 'Aegis' });
     const next = playerHeavyStrike(encounter);
     expect(next.turn).toBe('player');
@@ -50,3 +44,4 @@ describe('combat system', () => {
     expect(next.heavyCooldown).toBeGreaterThan(0);
     expect(playerHeavyStrike(next)).toBe(next);
   });
+});
