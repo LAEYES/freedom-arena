@@ -1,0 +1,27 @@
+name: Freedom Arena Web UI
+
+on:
+  push:
+    branches: [main, ui-overhaul]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Typecheck and build
+        run: npm run build
+      - name: Unit tests
+        run: npm test

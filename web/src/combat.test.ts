@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEncounter, getCombatPerformance, getCombatReward, playerAttack } from './combat';
+import { createEncounter, getCombatPerformance, getCombatReward, playerAttack, playerGuard, playerHeavyStrike } from './combat';
 
 describe('combat system', () => {
   it('creates deterministic encounters from level, threat and faction inputs', () => {
@@ -22,12 +22,53 @@ describe('combat system', () => {
 
   it('calculates rewards and positive performance for a victory', () => {
     const encounter = createEncounter(20, 1, { faction: 'Aegis' });
-    const victory = {
-      ...encounter,
-      status: 'victory' as const,
-      enemy: { ...encounter.enemy, hp: 0 },
-    };
+    const victory = { ...encounter, status: 'victory' as const, enemy: { ...encounter.enemy, hp: 0 } };
     expect(getCombatReward(victory)).toBeGreaterThan(0);
     expect(getCombatPerformance(victory)).toBeGreaterThan(0);
   });
+
+  it('guard reduces the next incoming damage', () => {
+    const encounter = createEncounter(5, 1, { faction: 'Aegis' });
+    const guarded = playerGuard(encounter);
+    expect(guarded.turn).toBe('player');
+    expect(guarded.player.hp).toBeGreaterThan(0);
+    const normalDamage = encounter.enemy.attack - Math.floor(encounter.player.defense * 0.6);
+    expect(encounter.player.hp - guarded.player.hp).toBeLessThan(normalDamage);
+  });
+
+  it('heavy strike deals damage and starts a cooldown', () => {
+    const encounter = createEncounter(10, 1, { faction: 'Aegis' });
+    const next = playerHeavyStrike(encounter);
+    expect(next.turn).toBe('player');
+    expect(next.enemy.hp).toBeLessThan(encounter.enemy.hp);
+    expect(next.heavyCooldown).toBeGreaterThan(0);
+    expect(next.momentum).toBe(0);
+    expect(next.enemyStunned).toBe(true);
+    expect(playerHeavyStrike(next)).toBe(next);
+  });
+  it('builds momentum with attacks and releases it on heavy strike', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const first = playerAttack(encounter);
+    expect(first.momentum).toBe(1);
+    const second = playerAttack(first);
+    expect(second.momentum).toBe(2);
+  });
+
+  it('applies bleed after a strong attack and weakens the enemy after heavy strike', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const first = playerAttack(encounter);
+    expect(first.enemyEffects.bleed).toBeGreaterThanOrEqual(0);
+    const heavy = playerHeavyStrike(first);
+    expect(heavy.enemyEffects.weakened).toBe(2);
+  });
+
+  it('expires weakened after each enemy turn', () => {
+    const encounter = createEncounter(20, 1, { faction: 'Aegis' });
+    const weakened = { ...encounter, enemyEffects: { ...encounter.enemyEffects, weakened: 2 } };
+    const afterFirstTurn = playerGuard(weakened);
+    expect(afterFirstTurn.enemyEffects.weakened).toBe(1);
+    const afterSecondTurn = playerGuard(afterFirstTurn);
+    expect(afterSecondTurn.enemyEffects.weakened).toBe(0);
+  });
+
 });

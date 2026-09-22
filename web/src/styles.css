@@ -21,3 +21,1195 @@ form{display:grid;gap:9px;min-width:min(100%,340px)}input{border:1px solid #3b4c
 
 .hud-layer{position:relative;overflow:hidden}.hud-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}.hud-chip{border:1px solid #314567;border-radius:10px;padding:9px;background:rgba(8,14,27,.78);display:grid;gap:3px}.hud-chip b{font-size:9px;letter-spacing:.14em;opacity:.55}.hud-chip span{font-size:13px}.hud-radar{position:absolute;right:24px;top:58px;width:120px;height:120px;border:1px solid #3f5880;border-radius:50%;opacity:.5;pointer-events:none;overflow:hidden}.radar-ring{position:absolute;border:1px solid #3f5880;border-radius:50%;inset:20px}.ring-b{inset:40px}.radar-core{position:absolute;width:8px;height:8px;left:56px;top:56px;border-radius:50%;background:#dce7ff;box-shadow:0 0 14px #829bd0}.radar-label{position:absolute;left:31px;bottom:14px;font-size:7px;letter-spacing:.15em}.radar-sweep{position:absolute;width:50%;height:1px;left:50%;top:50%;transform-origin:left center;background:#829bd0;animation:radarSweep 3s linear infinite}.radar-sweep:after{content:"";position:absolute;right:-3px;top:-2px;width:5px;height:5px;border-radius:50%;background:#dce7ff}@keyframes radarSweep{to{transform:rotate(360deg)}}@media(max-width:720px){.hud-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.hud-radar{position:relative;right:auto;top:auto;margin:8px 0 14px auto;width:96px;height:96px}.radar-core{left:44px;top:44px}.radar-label{left:20px}}
 .world-canvas-layer{position:relative;width:100%;height:100%;min-height:260px}.world-canvas-layer>.tile-canvas{position:absolute;inset:0;width:100%;height:100%;min-height:260px}.world-canvas-layer>.tile-canvas-dynamic{pointer-events:none}
+
+
+/* =========================================================
+   FREEDOM ARENA — UI OVERHAUL v0.1
+   Visual layer only: gameplay and data contracts unchanged.
+   ========================================================= */
+
+:root{
+  --fa-bg:#050811;
+  --fa-panel:rgba(9,15,28,.92);
+  --fa-panel-2:rgba(13,22,39,.94);
+  --fa-line:rgba(116,145,194,.28);
+  --fa-line-strong:rgba(142,174,230,.58);
+  --fa-text:#edf3ff;
+  --fa-muted:#91a1bd;
+  --fa-blue:#8fb7ff;
+  --fa-gold:#e6c77d;
+  --fa-danger:#ef7777;
+  --fa-purple:#b69aff;
+}
+
+body{
+  background:
+    radial-gradient(circle at 50% -10%,rgba(68,105,171,.22),transparent 38%),
+    radial-gradient(circle at 100% 55%,rgba(103,73,164,.09),transparent 32%),
+    linear-gradient(180deg,#070c18 0%,#04070e 100%);
+  color:var(--fa-text);
+}
+
+.shell{
+  max-width:1440px;
+  padding:24px;
+  position:relative;
+}
+
+.shell:before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  opacity:.035;
+  background-image:
+    linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
+  background-size:32px 32px;
+  mask-image:linear-gradient(to bottom,black,transparent 85%);
+}
+
+.header{
+  padding:8px 4px 18px;
+  border-bottom:1px solid var(--fa-line);
+}
+
+.header h1{
+  font-size:clamp(30px,4vw,48px);
+  letter-spacing:-.045em;
+  text-shadow:0 0 30px rgba(111,157,235,.16);
+}
+
+.status{
+  border-color:var(--fa-line);
+  background:rgba(11,19,34,.72);
+  color:#b9c9e5;
+  backdrop-filter:blur(12px);
+}
+
+.hero,.panel{
+  border-color:var(--fa-line);
+  background:linear-gradient(145deg,var(--fa-panel-2),var(--fa-panel));
+  box-shadow:0 18px 55px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025);
+  backdrop-filter:blur(12px);
+}
+
+.hero{
+  position:relative;
+  overflow:hidden;
+}
+
+.hero:after{
+  content:"";
+  position:absolute;
+  width:280px;
+  height:280px;
+  right:-100px;
+  top:-140px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(117,157,225,.16),transparent 65%);
+  pointer-events:none;
+}
+
+.panel{
+  position:relative;
+}
+
+.panel>div>h2{
+  letter-spacing:-.025em;
+}
+
+.eyebrow{
+  color:#9eb4d8;
+  font-weight:700;
+  letter-spacing:.19em;
+}
+
+button{
+  border-color:var(--fa-line);
+  background:linear-gradient(180deg,#17243b,#10192b);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+  font-weight:650;
+}
+
+button:hover:not(:disabled),button.selected{
+  border-color:var(--fa-line-strong);
+  background:linear-gradient(180deg,#203452,#15243d);
+  box-shadow:0 0 22px rgba(107,151,224,.12),inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.actions button:first-child:not(:disabled){
+  border-color:rgba(143,183,255,.42);
+}
+
+.world-layout{
+  grid-template-columns:minmax(0,1.65fr) minmax(260px,.55fr);
+}
+
+.world-map{
+  min-height:420px;
+  border-color:var(--fa-line);
+  background:
+    radial-gradient(circle at 50% 48%,rgba(39,65,105,.38),transparent 52%),
+    linear-gradient(145deg,#091120,#050a13);
+  box-shadow:inset 0 0 80px rgba(0,0,0,.34);
+}
+
+.world-map:before,.world-map:after{
+  opacity:.12;
+}
+
+.world-canvas-layer{
+  min-height:420px;
+}
+
+.zone-info{
+  background:rgba(7,13,24,.82);
+  border-color:var(--fa-line);
+}
+
+.hud-layer{
+  background:
+    linear-gradient(135deg,rgba(17,29,50,.94),rgba(8,14,27,.94)),
+    radial-gradient(circle at 90% 10%,rgba(143,183,255,.12),transparent 28%);
+}
+
+.hud-chip,.environment-grid article,.faction-state,.quest,.cards article{
+  border-color:var(--fa-line);
+  background:rgba(7,13,24,.72);
+}
+
+.hud-chip span{
+  color:#d9e6fb;
+}
+
+.hud-radar{
+  border-color:rgba(143,183,255,.38);
+  box-shadow:0 0 28px rgba(89,131,198,.09),inset 0 0 25px rgba(89,131,198,.05);
+}
+
+.radar-core{
+  background:var(--fa-blue);
+  box-shadow:0 0 16px var(--fa-blue);
+}
+
+.quest-progress{
+  background:#060b14;
+  border:1px solid rgba(255,255,255,.035);
+}
+
+.quest-progress i{
+  background:linear-gradient(90deg,#668fd2,#9dbdf5);
+  box-shadow:0 0 12px rgba(125,168,236,.28);
+}
+
+.cards article.card-equipped{
+  border-color:rgba(230,199,125,.7);
+  box-shadow:0 0 0 1px rgba(230,199,125,.18),0 16px 34px rgba(0,0,0,.28);
+}
+
+.card-stats span{
+  background:#070d18;
+  border:1px solid rgba(116,145,194,.13);
+}
+
+input{
+  border-color:var(--fa-line);
+  background:#070d18;
+}
+
+@media(max-width:760px){
+  .shell{padding:16px 12px}
+  .header{padding-bottom:14px}
+  .hero,.panel{border-radius:14px;padding:16px}
+  .world-map,.world-canvas-layer{min-height:320px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+
+
+/* --- Tactical command polish --- */
+.header{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:18px;
+}
+.header:after{
+  content:"FA // TACTICAL NETWORK";
+  position:absolute;
+  right:24px;
+  top:8px;
+  font:600 9px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.18em;
+  color:rgba(143,183,255,.34);
+}
+.hero{
+  isolation:isolate;
+}
+.hero:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(90deg,transparent 49.8%,rgba(143,183,255,.035) 50%,transparent 50.2%),
+    linear-gradient(0deg,transparent 49.8%,rgba(143,183,255,.025) 50%,transparent 50.2%);
+  background-size:48px 48px;
+  pointer-events:none;
+  z-index:-1;
+}
+.panel{
+  overflow:hidden;
+}
+.panel:before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  width:42px;
+  height:1px;
+  background:linear-gradient(90deg,var(--fa-blue),transparent);
+  opacity:.7;
+}
+.panel:after{
+  content:"";
+  position:absolute;
+  right:0;
+  bottom:0;
+  width:80px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--fa-line-strong));
+  opacity:.45;
+}
+.hud-layer{
+  border-color:rgba(143,183,255,.3);
+  background:
+    linear-gradient(90deg,rgba(17,29,50,.96),rgba(7,13,25,.94)),
+    repeating-linear-gradient(0deg,transparent 0 5px,rgba(143,183,255,.018) 6px);
+}
+.hud-strip{
+  gap:10px;
+}
+.hud-chip{
+  position:relative;
+  min-height:58px;
+  padding:12px 14px;
+  border-radius:10px;
+}
+.hud-chip:after{
+  content:"";
+  position:absolute;
+  top:7px;
+  right:8px;
+  width:4px;
+  height:4px;
+  border-radius:50%;
+  background:#7fa8e8;
+  box-shadow:0 0 9px rgba(127,168,232,.8);
+}
+.environment-grid article{
+  min-height:70px;
+}
+.environment-grid article span{
+  color:#d8e5fb;
+  font-weight:700;
+}
+.zone-node{
+  border-color:rgba(116,145,194,.2);
+  background:rgba(5,10,18,.76);
+}
+.zone-node.active{
+  border-color:rgba(143,183,255,.62);
+  box-shadow:0 0 20px rgba(94,137,205,.14);
+}
+.signal-actions,.scenario-choices{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
+.event-signal{
+  color:#d8bfff;
+  letter-spacing:.08em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media(max-width:760px){
+  .header{align-items:flex-start;flex-direction:column}
+  .header:after{right:14px;top:5px}
+  .hud-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hud-radar{min-height:180px}
+}
+
+
+
+/* --- Tactical HUD v0.2: command surfaces --- */
+:focus-visible{
+  outline:2px solid rgba(143,183,255,.8);
+  outline-offset:2px;
+}
+
+.actions{
+  position:relative;
+  padding:8px;
+  margin:14px -2px 0;
+  border:1px solid rgba(116,145,194,.13);
+  border-radius:12px;
+  background:rgba(3,7,14,.34);
+}
+
+.actions:before{
+  content:"COMMAND";
+  position:absolute;
+  left:10px;
+  top:-7px;
+  padding:0 6px;
+  background:#0a111f;
+  color:rgba(158,180,216,.5);
+  font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.16em;
+}
+
+.actions button{
+  min-height:38px;
+}
+
+.panel .actions button:first-child:not(:disabled){
+  background:linear-gradient(180deg,rgba(39,64,101,.95),rgba(18,32,54,.95));
+}
+
+.panel .actions button:last-child:not(:disabled){
+  border-color:rgba(143,183,255,.25);
+}
+
+.world-canvas-layer{
+  border:1px solid rgba(116,145,194,.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.015),
+    inset 0 0 55px rgba(0,0,0,.35);
+}
+
+.world-canvas-layer:before,
+.world-canvas-layer:after{
+  content:"";
+  position:absolute;
+  z-index:4;
+  width:18px;
+  height:18px;
+  pointer-events:none;
+  opacity:.65;
+}
+
+.world-canvas-layer:before{
+  left:8px;
+  top:8px;
+  border-left:1px solid var(--fa-blue);
+  border-top:1px solid var(--fa-blue);
+}
+
+.world-canvas-layer:after{
+  right:8px;
+  bottom:8px;
+  border-right:1px solid var(--fa-blue);
+  border-bottom:1px solid var(--fa-blue);
+}
+
+.tile-canvas{
+  image-rendering:pixelated;
+}
+
+.zone-info{
+  position:relative;
+}
+
+.zone-info:before{
+  content:"ZONE TELEMETRY";
+  display:block;
+  margin-bottom:8px;
+  color:rgba(158,180,216,.46);
+  font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.18em;
+}
+
+.environment-grid article{
+  position:relative;
+  overflow:hidden;
+}
+
+.environment-grid article:after{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:35%;
+  height:1px;
+  background:linear-gradient(90deg,rgba(143,183,255,.45),transparent);
+}
+
+.faction-state{
+  transition:border-color .15s ease,transform .15s ease,background .15s ease;
+}
+
+.faction-state:hover{
+  transform:translateY(-1px);
+  border-color:rgba(143,183,255,.34);
+  background:rgba(10,18,32,.9);
+}
+
+.quest{
+  position:relative;
+  overflow:hidden;
+}
+
+.quest:before{
+  content:"OBJECTIVE";
+  color:rgba(158,180,216,.38);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.15em;
+}
+
+.quest.completed:before{
+  content:"OBJECTIVE // COMPLETE";
+  color:rgba(230,199,125,.62);
+}
+
+.cards article{
+  position:relative;
+  overflow:hidden;
+}
+
+.cards article:before{
+  content:"RPGQG";
+  position:absolute;
+  right:10px;
+  top:9px;
+  color:rgba(158,180,216,.2);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.14em;
+}
+
+.cards article.card-equipped:before{
+  content:"EQUIPPED";
+  color:rgba(230,199,125,.65);
+}
+
+@media(max-width:760px){
+  .actions{
+    margin-top:12px;
+    padding:9px;
+  }
+
+  .actions button{
+    flex:1 1 calc(50% - 8px);
+    min-width:120px;
+  }
+
+  .world-canvas-layer:before,
+  .world-canvas-layer:after{
+    width:13px;
+    height:13px;
+  }
+}
+
+
+/* --- Tactical presentation v0.3: viewport + scanline layer --- */
+html,body,#root{min-height:100%;}
+body{overflow-x:hidden;}
+
+.world-canvas-layer{
+  isolation:isolate;
+  background:#050a13;
+}
+.world-canvas-layer > .tile-canvas{
+  filter:saturate(.9) contrast(1.04);
+}
+.world-canvas-layer::marker{display:none;}
+.world-canvas-layer .tile-canvas-dynamic{z-index:2;}
+
+/* A restrained CRT/tactical scan layer that sits above the map but below controls. */
+.world-canvas-layer::before{
+  box-shadow:inset 0 0 0 9999px rgba(4,8,15,.015);
+  background:
+    repeating-linear-gradient(0deg,transparent 0 3px,rgba(143,183,255,.018) 4px),
+    linear-gradient(135deg,rgba(143,183,255,.035),transparent 38%,rgba(182,154,255,.025));
+  width:100%;height:100%;left:0;top:0;right:auto;bottom:auto;
+  border:0;
+  opacity:.7;
+  z-index:3;
+}
+.world-canvas-layer::after{
+  width:18px;height:18px;right:8px;bottom:8px;
+  border-right:1px solid var(--fa-blue);border-bottom:1px solid var(--fa-blue);
+  z-index:5;
+  background:transparent;
+}
+
+.panel h2::after{
+  content:"";
+  display:inline-block;
+  width:22px;
+  height:1px;
+  margin:0 0 5px 8px;
+  background:linear-gradient(90deg,var(--fa-blue),transparent);
+  opacity:.55;
+}
+
+.actions button:active:not(:disabled){transform:translateY(1px);}
+button:disabled{filter:saturate(.55);}
+
+@media(max-width:760px){
+  .shell{padding-bottom:calc(20px + env(safe-area-inset-bottom));}
+  .world-canvas-layer,.world-map{min-height:300px;}
+  .hud-layer{padding-bottom:calc(16px + env(safe-area-inset-bottom));}
+}
+
+
+/* --- World map signal legend --- */
+.world-legend{position:absolute;left:12px;bottom:12px;z-index:6;display:flex;flex-wrap:wrap;gap:6px;padding:7px 8px;border:1px solid rgba(116,145,194,.24);border-radius:9px;background:rgba(4,8,15,.78);backdrop-filter:blur(8px);font:700 8px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;color:rgba(216,229,251,.72)}
+.world-legend span{display:inline-flex;align-items:center;gap:5px;padding:3px 5px}
+.legend-dot{display:inline-block;width:6px;height:6px;border-radius:50%;box-shadow:0 0 7px currentColor}
+.legend-poi{color:#d8b56a;background:currentColor}.legend-npc{color:#9db4e8;background:currentColor}.legend-event{color:#ad8ee8;background:currentColor}
+.legend-line{display:inline-block;width:11px;height:2px;background:#d8b56a;box-shadow:0 0 6px rgba(216,181,106,.5)}
+@media(max-width:760px){.world-legend{left:8px;right:8px;bottom:8px;justify-content:center}.world-legend span{padding:4px 5px}}
+
+
+/* =========================================================
+   FREEDOM ARENA — VISUAL REFOUNDATION v0.4
+   Tactical command deck / RPG interface
+   ========================================================= */
+:root{
+  --fa-bg-deep:#03050a;
+  --fa-surface:#080d16;
+  --fa-surface-2:#0c1421;
+  --fa-surface-3:#101b2c;
+  --fa-border:rgba(151,181,229,.20);
+  --fa-border-hi:rgba(151,181,229,.48);
+  --fa-glow:rgba(91,151,255,.18);
+  --fa-accent:#9cc2ff;
+  --fa-success:#7fe0b1;
+  --fa-warning:#e6c77d;
+}
+
+html{background:var(--fa-bg-deep)}
+body{
+  background:
+    radial-gradient(900px 500px at 50% -120px,rgba(71,117,190,.20),transparent 70%),
+    radial-gradient(600px 700px at 105% 30%,rgba(92,63,155,.10),transparent 70%),
+    linear-gradient(180deg,#050914 0%,#020409 100%);
+}
+.shell{
+  max-width:1480px;
+  padding:28px clamp(14px,3vw,38px) 60px;
+}
+.shell:after{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px);
+  background-size:64px 64px;
+  mask-image:linear-gradient(to bottom,black,transparent 75%);
+}
+.header{
+  min-height:78px;
+  margin-bottom:16px;
+  padding:12px 4px 18px;
+  border-bottom:1px solid var(--fa-border);
+  position:relative;
+}
+.header h1{
+  font-size:clamp(32px,4.4vw,54px);
+  letter-spacing:-.055em;
+  line-height:.95;
+}
+.header .eyebrow{
+  color:#7f9fcf;
+}
+.status{
+  padding:8px 12px;
+  border-color:var(--fa-border-hi);
+  background:rgba(8,14,25,.82);
+  box-shadow:0 0 24px rgba(90,135,205,.08);
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.hero{
+  min-height:150px;
+  border-radius:20px;
+  padding:24px 26px;
+  background:
+    linear-gradient(120deg,rgba(16,29,49,.97),rgba(7,12,21,.94)),
+    radial-gradient(circle at 85% 20%,rgba(125,170,240,.12),transparent 30%);
+}
+.hero h2{font-size:clamp(25px,3vw,36px);margin-top:9px}
+.hero p{max-width:760px}
+.equipped{
+  min-width:230px;
+  border-radius:12px;
+  border-color:rgba(230,199,125,.38);
+  background:linear-gradient(145deg,rgba(45,37,20,.42),rgba(11,18,29,.9));
+  box-shadow:0 0 32px rgba(230,199,125,.06);
+}
+.panel{
+  border-radius:16px;
+  padding:22px;
+  border-color:var(--fa-border);
+  background:
+    linear-gradient(145deg,rgba(12,20,33,.96),rgba(5,9,16,.96));
+  box-shadow:
+    0 20px 60px rgba(0,0,0,.24),
+    inset 0 1px 0 rgba(255,255,255,.028);
+}
+.panel>div>h2{font-size:22px}
+.panel>div>.eyebrow{display:inline-block;margin-bottom:2px}
+.panel:before{
+  width:70px;
+  height:2px;
+  background:linear-gradient(90deg,var(--fa-accent),transparent);
+  box-shadow:0 0 12px rgba(156,194,255,.22);
+}
+.actions{
+  padding:10px;
+  border-radius:12px;
+  border-color:rgba(151,181,229,.12);
+  background:rgba(2,5,10,.48);
+}
+.actions:before{
+  content:"COMMAND";
+  color:#6584b1;
+  background:#070d17;
+  font-size:8px;
+  letter-spacing:.2em;
+}
+button{
+  min-height:40px;
+  border-radius:9px;
+  border-color:rgba(151,181,229,.22);
+  background:linear-gradient(180deg,#142238,#0c1524);
+  letter-spacing:.01em;
+}
+button:hover:not(:disabled),button.selected{
+  transform:translateY(-1px);
+  border-color:var(--fa-border-hi);
+  box-shadow:0 7px 24px rgba(69,116,184,.13);
+}
+.actions button:first-child:not(:disabled){
+  background:linear-gradient(180deg,#1b3152,#10223a);
+}
+.world-layout{
+  grid-template-columns:minmax(0,1.8fr) minmax(250px,.62fr);
+  gap:14px;
+}
+.world-map{
+  min-height:460px;
+  border-radius:14px;
+  border-color:var(--fa-border);
+  background:
+    radial-gradient(circle at 50% 50%,rgba(48,81,130,.20),transparent 45%),
+    linear-gradient(145deg,#07101d,#03070d);
+  box-shadow:
+    inset 0 0 100px rgba(0,0,0,.52),
+    0 0 0 1px rgba(151,181,229,.04);
+}
+.world-map:before,.world-map:after{opacity:.08}
+.world-canvas-layer{min-height:460px}
+.zone-info{
+  border-radius:12px;
+  background:rgba(4,8,15,.76);
+}
+.zone-info p{
+  padding-bottom:9px;
+  border-bottom:1px solid rgba(151,181,229,.08);
+}
+.zone-node{
+  min-width:150px;
+  padding:10px 12px;
+  border-radius:9px;
+  backdrop-filter:blur(8px);
+}
+.zone-node.active{
+  border-color:rgba(156,194,255,.65);
+  box-shadow:0 0 0 1px rgba(156,194,255,.14),0 0 28px rgba(83,139,215,.16);
+}
+.hud-layer{
+  border-color:rgba(156,194,255,.26);
+  background:
+    linear-gradient(135deg,rgba(13,27,46,.97),rgba(4,9,17,.97));
+}
+.hud-strip{gap:8px}
+.hud-chip{
+  min-height:64px;
+  background:linear-gradient(145deg,rgba(15,28,47,.86),rgba(5,10,18,.86));
+}
+.hud-chip span{font-weight:750}
+.environment-grid article{
+  background:rgba(4,9,16,.66);
+}
+.combat-telemetry{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(156,194,255,.18);
+  border-radius:8px;
+  background:rgba(6,12,21,.72);
+  color:#a9c6ee;
+  font:700 11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.08em;
+}
+.cards{
+  gap:14px;
+}
+.cards article{
+  min-height:190px;
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(17,29,47,.9),rgba(5,10,18,.94));
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+}
+.cards article:hover{
+  transform:translateY(-3px);
+  border-color:rgba(156,194,255,.35);
+  box-shadow:0 16px 35px rgba(0,0,0,.25);
+}
+.cards article.card-equipped{
+  border-color:rgba(230,199,125,.72);
+}
+.quest,.faction-state,.environment-grid article{
+  border-radius:10px;
+}
+.quest.completed{
+  border-color:rgba(127,224,177,.38);
+}
+.quest-progress i{
+  background:linear-gradient(90deg,#5f93df,#a5c7ff);
+}
+.event-signal{
+  display:inline-block;
+  padding:7px 10px;
+  border:1px solid rgba(182,154,255,.22);
+  border-radius:7px;
+  background:rgba(65,40,108,.12);
+}
+@media(max-width:900px){
+  .world-layout{grid-template-columns:1fr}
+  .world-map,.world-canvas-layer{min-height:380px}
+  .zone-info{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+}
+@media(max-width:620px){
+  .shell{padding:14px 10px 40px}
+  .hero,.panel{padding:16px;border-radius:13px}
+  .header{min-height:64px}
+  .header h1{font-size:34px}
+  .equipped{min-width:0}
+  .world-map,.world-canvas-layer{min-height:320px}
+  .zone-info{display:block}
+  .hud-strip{grid-template-columns:1fr 1fr}
+  .environment-grid{grid-template-columns:1fr 1fr}
+  .actions{padding:8px}
+  .actions button{flex:1 1 calc(50% - 8px)}
+}
+
+
+/* =========================================================
+   FREEDOM ARENA — COMMAND DECK v0.5
+   Stronger game identity: tactical RPG / expedition console.
+   ========================================================= */
+:root{
+  --fa-ink:#02050a;
+  --fa-glass:rgba(8,14,24,.82);
+  --fa-grid:rgba(141,178,232,.055);
+  --fa-cyan:#8fd4ff;
+  --fa-mint:#82e3bc;
+  --fa-amber:#f0ce82;
+}
+
+body{
+  background:
+    radial-gradient(1100px 560px at 50% -180px,rgba(72,137,205,.24),transparent 68%),
+    radial-gradient(700px 700px at -10% 45%,rgba(53,108,166,.10),transparent 70%),
+    linear-gradient(180deg,#050914 0%,#02050a 72%,#010307 100%);
+}
+
+.shell{
+  max-width:1520px;
+}
+
+.header{
+  align-items:center;
+  min-height:86px;
+  border-bottom:1px solid rgba(143,196,255,.16);
+}
+
+.header h1{
+  font-weight:850;
+  text-transform:uppercase;
+  letter-spacing:-.065em;
+}
+
+.header .eyebrow{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:var(--fa-cyan);
+}
+
+.status{
+  position:relative;
+  padding-left:28px;
+  border-color:rgba(130,227,188,.28);
+  color:#bdeed9;
+}
+
+.status:before{
+  content:"";
+  position:absolute;
+  left:11px;
+  top:50%;
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  transform:translateY(-50%);
+  background:var(--fa-mint);
+  box-shadow:0 0 12px rgba(130,227,188,.9);
+}
+
+.hero{
+  border-color:rgba(143,196,255,.20);
+  background:
+    linear-gradient(110deg,rgba(12,28,47,.98),rgba(5,10,18,.96) 68%),
+    radial-gradient(circle at 85% 40%,rgba(143,212,255,.15),transparent 32%);
+}
+
+.hero h2{
+  text-transform:uppercase;
+  letter-spacing:-.04em;
+}
+
+.hero .eyebrow:after{
+  content:"  //  EXPEDITION READY";
+  color:rgba(143,212,255,.42);
+}
+
+.panel{
+  border-color:rgba(143,196,255,.15);
+  background:
+    linear-gradient(145deg,rgba(10,18,30,.96),rgba(3,7,13,.97));
+}
+
+.panel>div>h2{
+  text-transform:uppercase;
+  letter-spacing:-.035em;
+}
+
+.panel>div>h2:before{
+  content:"▸";
+  display:inline-block;
+  margin-right:8px;
+  color:var(--fa-cyan);
+  font-size:.7em;
+  transform:translateY(-1px);
+}
+
+.actions{
+  background:
+    linear-gradient(180deg,rgba(9,17,29,.78),rgba(2,6,12,.78));
+  border-color:rgba(143,196,255,.15);
+}
+
+.actions button{
+  position:relative;
+  overflow:hidden;
+  font-weight:750;
+}
+
+.actions button:after{
+  content:"";
+  position:absolute;
+  left:-30%;
+  right:-30%;
+  bottom:-1px;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--fa-cyan),transparent);
+  opacity:0;
+  transition:opacity .15s ease;
+}
+
+.actions button:hover:not(:disabled):after{
+  opacity:.65;
+}
+
+.world-map{
+  border-color:rgba(143,196,255,.20);
+  background:
+    linear-gradient(var(--fa-grid) 1px,transparent 1px),
+    linear-gradient(90deg,var(--fa-grid) 1px,transparent 1px),
+    radial-gradient(circle at 50% 48%,rgba(43,93,145,.25),transparent 44%),
+    linear-gradient(145deg,#07111e,#02060c);
+  background-size:32px 32px,32px 32px,auto,auto;
+}
+
+.world-map:before{
+  opacity:.18;
+  box-shadow:0 -80px 0 rgba(143,212,255,.7),0 80px 0 rgba(143,212,255,.7);
+}
+
+.zone-node{
+  box-shadow:0 10px 25px rgba(0,0,0,.3);
+  border-color:rgba(143,196,255,.20);
+}
+
+.zone-node.active{
+  border-color:rgba(143,212,255,.72);
+  background:linear-gradient(145deg,rgba(19,44,69,.96),rgba(7,16,28,.96));
+}
+
+.hud-layer{
+  border-color:rgba(143,212,255,.28);
+  box-shadow:0 18px 45px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.hud-chip{
+  border-color:rgba(143,196,255,.16);
+  background:rgba(3,9,17,.78);
+}
+
+.hud-chip b{
+  color:rgba(143,212,255,.55);
+}
+
+.combat-telemetry{
+  border-color:rgba(143,212,255,.20);
+  color:#b9dcff;
+  box-shadow:inset 0 0 20px rgba(65,137,194,.05);
+}
+
+.cards article{
+  background:
+    linear-gradient(145deg,rgba(17,31,50,.92),rgba(4,9,16,.96));
+}
+
+.cards article strong{
+  text-transform:uppercase;
+  letter-spacing:.025em;
+}
+
+.cards article.card-equipped{
+  background:
+    linear-gradient(145deg,rgba(48,39,20,.42),rgba(7,12,20,.96));
+  border-color:rgba(240,206,130,.68);
+}
+
+.cards article.card-equipped:after{
+  content:"ACTIVE LOADOUT";
+  position:absolute;
+  left:12px;
+  bottom:10px;
+  color:rgba(240,206,130,.58);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.16em;
+}
+
+.quest-progress{
+  height:8px;
+}
+
+.quest-progress i{
+  box-shadow:0 0 14px rgba(143,196,255,.24);
+}
+
+.faction-state{
+  background:linear-gradient(145deg,rgba(12,22,37,.85),rgba(4,9,16,.85));
+}
+
+.environment-grid article{
+  background:linear-gradient(145deg,rgba(10,20,33,.82),rgba(3,8,14,.86));
+}
+
+input:focus{
+  border-color:rgba(143,212,255,.65);
+  box-shadow:0 0 0 3px rgba(143,212,255,.07);
+}
+
+@media(max-width:620px){
+  .header{
+    min-height:68px;
+  }
+  .header:after{
+    display:none;
+  }
+  .hero .eyebrow:after{
+    content:"";
+  }
+  .world-map{
+    background-size:24px 24px,24px 24px,auto,auto;
+  }
+}
+
+
+/* =========================================================
+   FREEDOM ARENA — DIRECTION ARTISTIQUE v0.6
+   Interface française + finition RPG tactique.
+   ========================================================= */
+:root{
+  --fa-neon:#8fd9ff;
+  --fa-neon-soft:rgba(143,217,255,.18);
+  --fa-gold:#f0d18a;
+  --fa-green:#7fe0b1;
+  --fa-red:#ef8585;
+}
+
+body{
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
+}
+
+.shell{
+  position:relative;
+}
+
+.shell:before{
+  opacity:.055;
+  background-size:48px 48px;
+  mask-image:linear-gradient(to bottom,black 0%,transparent 92%);
+}
+
+.header{
+  background:linear-gradient(90deg,rgba(7,14,24,.7),transparent 70%);
+}
+
+.header h1{
+  text-shadow:
+    0 0 18px rgba(143,217,255,.12),
+    0 0 48px rgba(83,140,205,.10);
+}
+
+.hero{
+  box-shadow:
+    0 24px 70px rgba(0,0,0,.32),
+    inset 0 1px 0 rgba(255,255,255,.035),
+    inset 0 0 80px rgba(83,140,205,.045);
+}
+
+.hero:after{
+  width:360px;
+  height:360px;
+  background:
+    radial-gradient(circle,rgba(143,217,255,.13),transparent 55%),
+    conic-gradient(from 30deg,transparent 0 65%,rgba(143,217,255,.05) 70%,transparent 78%);
+  animation:faGlow 7s ease-in-out infinite alternate;
+}
+
+@keyframes faGlow{
+  from{transform:translate3d(0,0,0) scale(.96);opacity:.65}
+  to{transform:translate3d(-18px,12px,0) scale(1.04);opacity:1}
+}
+
+.world-map{
+  position:relative;
+  box-shadow:
+    inset 0 0 110px rgba(0,0,0,.65),
+    inset 0 0 0 1px rgba(143,217,255,.035),
+    0 18px 45px rgba(0,0,0,.24);
+}
+
+.world-map:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 50%,transparent 30%,rgba(0,0,0,.18) 100%),
+    repeating-linear-gradient(0deg,transparent 0 4px,rgba(143,217,255,.012) 5px);
+  z-index:3;
+}
+
+.world-canvas-layer{
+  border-color:rgba(143,217,255,.28);
+  box-shadow:
+    inset 0 0 100px rgba(0,0,0,.42),
+    inset 0 0 0 1px rgba(143,217,255,.035),
+    0 0 30px rgba(83,140,205,.05);
+}
+
+.zone-node{
+  z-index:7;
+  transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+}
+
+.zone-node:hover:not(:disabled){
+  transform:translateY(-2px) scale(1.015);
+  box-shadow:0 12px 30px rgba(0,0,0,.38),0 0 20px rgba(143,217,255,.08);
+}
+
+.zone-node.active:after{
+  content:"ACTIF";
+  position:absolute;
+  right:8px;
+  top:7px;
+  color:var(--fa-green);
+  font:700 7px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+  letter-spacing:.12em;
+}
+
+.hud-layer{
+  box-shadow:
+    0 20px 60px rgba(0,0,0,.28),
+    inset 0 0 60px rgba(72,135,197,.035);
+}
+
+.hud-chip{
+  overflow:hidden;
+}
+
+.hud-chip:before{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:0;
+  width:38%;
+  height:2px;
+  background:linear-gradient(90deg,var(--fa-neon),transparent);
+  opacity:.42;
+}
+
+.combat-telemetry{
+  box-shadow:
+    inset 0 0 24px rgba(143,217,255,.035),
+    0 0 18px rgba(83,140,205,.04);
+}
+
+.cards article{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.025),
+    0 12px 28px rgba(0,0,0,.16);
+}
+
+.cards article:hover{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    0 20px 42px rgba(0,0,0,.32),
+    0 0 24px rgba(83,140,205,.06);
+}
+
+.cards article.card-equipped{
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 18px 40px rgba(0,0,0,.3),
+    0 0 26px rgba(240,209,138,.08);
+}
+
+.quest{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02);
+}
+
+.quest.completed{
+  background:linear-gradient(145deg,rgba(14,39,34,.5),rgba(4,11,15,.86));
+}
+
+.event-signal{
+  color:#d9c7ff;
+  box-shadow:0 0 22px rgba(182,154,255,.05);
+}
+
+@media(max-width:620px){
+  .hero:after{display:none}
+  .panel{box-shadow:0 12px 35px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.025)}
+}
