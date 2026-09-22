@@ -517,7 +517,6 @@ input{
 html,body,#root{min-height:100%;}
 body{overflow-x:hidden;}
 
-.world-canvas-layer:global{} 
 .world-canvas-layer{
   isolation:isolate;
   background:#050a13;
