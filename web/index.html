@@ -21,18 +21,5 @@
       });
     </script>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Production safety net: if the hosting layer serves the source entry unchanged,
-      // load the Vite production bundle explicitly.
-      window.setTimeout(function () {
-        var root = document.getElementById('root');
-        if (root && document.getElementById('startup-status')) {
-          var fallback = document.createElement('script');
-          fallback.type = 'module';
-          fallback.src = './assets/app.js?boot=3bb0eb5';
-          document.head.appendChild(fallback);
-        }
-      }, 1200);
-    </script>
   </body>
 </html>
