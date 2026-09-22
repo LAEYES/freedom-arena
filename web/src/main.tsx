@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
 import { createEncounter, getCombatReward, getCombatSummary, playerAttack, type CombatState } from './combat';
+import { getTileDefinition } from './tiles/tileRegistry';
+import { paintTacticalTile } from './tiles/tilePainter';
 import { equipCard, factions, fuseCards, getCardFusionCost, getEquippedCard, grantArenaReward, applyPoiReward, applyScenarioChoice, applyCombatOutcome, applyWorldEventState, applyNpcInteraction, explore, loadPlayer, savePlayer, upgradeCard, type Faction } from './game';
 
 function isFreshRemotePresence(entry: ZonePresence) { return Date.now() - entry.updatedAt <= 15000; }
@@ -111,13 +113,11 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
           const worldX = x + cameraX, worldY = y + cameraY;
           const terrain = getTile(worldX, worldY);
           const biome = Math.floor((worldX + worldY) / 12) % 4;
-          staticCtx.fillStyle = terrain.kind === 'water' ? '#102f4a' : terrain.kind === 'rock' ? '#30364a' : terrain.kind === 'wall' ? '#070b13' : biome === 0 ? '#101b30' : biome === 1 ? '#172536' : biome === 2 ? '#182d28' : '#241f32';
-          staticCtx.fillRect(x*tile,y*tile,tile,tile);
-          if (terrain.kind !== 'ground') {
-            staticCtx.strokeStyle = terrain.kind === 'wall' ? '#202b40' : '#53627b';
-            staticCtx.lineWidth = 1;
-            staticCtx.strokeRect(x*tile+1,y*tile+1,tile-2,tile-2);
-          }
+          const terrainCategory = terrain.kind === 'water' ? 'WATER' : terrain.kind === 'rock' ? 'OBSTACLES' : terrain.kind === 'wall' ? 'WALLS' : biome === 1 ? 'NATURE' : biome === 2 ? 'DESERT' : biome === 3 ? 'DUNGEON' : 'GROUND';
+          const tileId = terrain.kind === 'water' ? '08_00' : terrain.kind === 'rock' ? '16_00' : terrain.kind === 'wall' ? '05_00' : terrainCategory === 'NATURE' ? '07_00' : terrainCategory === 'DESERT' ? '11_00' : terrainCategory === 'DUNGEON' ? '12_00' : '01_00';
+          const atlasTile = getTileDefinition(tileId);
+          if (atlasTile) paintTacticalTile(staticCtx, atlasTile, terrain.kind, x, y, worldX * 61 + worldY * 17);
+          else { staticCtx.fillStyle = '#101b30'; staticCtx.fillRect(x*tile,y*tile,tile,tile); }
         }
         staticKey = terrainKey;
       }
