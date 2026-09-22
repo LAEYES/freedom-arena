@@ -32,7 +32,6 @@ describe('combat system', () => {
   });
 });
 
-
   it('guard reduces the next incoming damage', () => {
     const encounter = createEncounter(5, 1, { faction: 'Aegis' });
     const guarded = playerGuard(encounter);
