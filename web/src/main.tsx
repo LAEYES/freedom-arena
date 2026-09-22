@@ -10,6 +10,98 @@ import { equipCard, factions, fuseCards, getCardFusionCost, getEquippedCard, gra
 
 function isFreshRemotePresence(entry: ZonePresence) { return Date.now() - entry.updatedAt <= 15000; }
 
+const RENDER_TILE_SIZE = 64 as const;
+
+function drawPixelTile(
+  ctx: CanvasRenderingContext2D,
+  kind: 'ground' | 'water' | 'rock' | 'wall',
+  biome: number,
+  x: number,
+  y: number,
+  size: number,
+  seed: number,
+) {
+  const palettes = {
+    ground: ['#243b28', '#2d4a30', '#355535', '#1e3223'],
+    water: ['#12466b', '#17608b', '#2378a8', '#0e3654'],
+    rock: ['#42495b', '#596174', '#737b8d', '#303747'],
+    wall: ['#171b27', '#242b3b', '#303b50', '#0e111a'],
+  } as const;
+  const palette = palettes[kind];
+  ctx.fillStyle = palette[0];
+  ctx.fillRect(x, y, size, size);
+
+  const block = Math.max(3, Math.floor(size / 16));
+  const columns = Math.ceil(size / block);
+  const rows = Math.ceil(size / block);
+  let value = (seed * 1103515245 + 12345) >>> 0;
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      value = (value * 1664525 + 1013904223) >>> 0;
+      const roll = value % 100;
+      if (roll < (kind === 'ground' ? 24 : kind === 'water' ? 18 : 30)) {
+        const shade = palette[(value >>> 8) % palette.length];
+        ctx.fillStyle = shade;
+        const sizeX = kind === 'water' ? block * 2 : block;
+        const sizeY = kind === 'water' ? Math.max(2, Math.floor(block / 2)) : block;
+        ctx.fillRect(
+          x + col * block,
+          y + row * block,
+          Math.min(sizeX, x + size - (x + col * block)),
+          Math.min(sizeY, y + size - (y + row * block)),
+        );
+      }
+    }
+  }
+
+  if (kind === 'ground' && biome === 2) {
+    ctx.fillStyle = '#49633a';
+    for (let i = 0; i < 4; i++) {
+      const px = x + ((seed + i * 17) % Math.max(1, size - 6));
+      const py = y + ((seed * 3 + i * 23) % Math.max(1, size - 8));
+      ctx.fillRect(px, py, 2, 8);
+      ctx.fillRect(px - 2, py + 5, 6, 2);
+    }
+  }
+
+  if (kind === 'water') {
+    ctx.fillStyle = '#73c7e8';
+    for (let i = 0; i < 3; i++) {
+      const yy = y + 10 + ((seed + i * 19) % Math.max(1, size - 16));
+      const xx = x + ((seed * 7 + i * 13) % Math.max(1, size - 22));
+      ctx.fillRect(xx, yy, Math.min(18, size - 8), 2);
+    }
+  }
+
+  if (kind === 'rock') {
+    ctx.fillStyle = '#9aa3b4';
+    ctx.fillRect(x + size * 0.25, y + size * 0.2, size * 0.22, block);
+    ctx.fillRect(x + size * 0.18, y + size * 0.2 + block, size * 0.34, block);
+    ctx.fillRect(x + size * 0.12, y + size * 0.2 + block * 2, size * 0.48, block);
+  }
+
+  if (kind === 'wall') {
+    ctx.strokeStyle = '#3e4a60';
+    ctx.lineWidth = 2;
+    for (let yy = y; yy < y + size; yy += block * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, yy);
+      ctx.lineTo(x + size, yy);
+      ctx.stroke();
+    }
+    for (let row = 0; row < Math.ceil(size / (block * 2)); row++) {
+      const offset = row % 2 ? block : 0;
+      for (let xx = x + offset; xx < x + size; xx += block * 2) {
+        ctx.beginPath();
+        ctx.moveTo(xx, y + row * block * 2);
+        ctx.lineTo(xx, Math.min(y + size, y + row * block * 2 + block * 2));
+        ctx.stroke();
+      }
+    }
+  }
+}
+
 function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources, explorationCount, factionInfluence, worldEvent, worldEventAge, remotePlayers, onTileMove, onSignalSelect }: { zoneId: string; waypoint: {x:number;y:number}|null; worldTile: {x:number;y:number}; worldThreat: number; worldResources: number; explorationCount: number; factionInfluence: number; worldEvent: import('./world').WorldEvent; worldEventAge: number; remotePlayers: ZonePresence[]; onTileMove: (tileX: number, tileY: number) => void; onSignalSelect: (signal: {type:'poi'|'npc'|'event'; name:string; x:number; y:number}) => void }) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const dynamicRef = useRef<HTMLCanvasElement>(null);
@@ -36,7 +128,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
     if (!canvas) return;
     const onPointer = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
-      const tile = 32;
+      const tile = RENDER_TILE_SIZE;
       const clickX = event.clientX - rect.left;
       const clickY = event.clientY - rect.top;
       const cols = Math.ceil(rect.width / tile);
@@ -100,7 +192,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         sceneKey = '';
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const tile = 32, cols = Math.ceil(rect.width / tile), rows = Math.ceil(rect.height / tile);
+      const tile = RENDER_TILE_SIZE, cols = Math.ceil(rect.width / tile), rows = Math.ceil(rect.height / tile);
       const cameraX = Math.max(0, Math.min(59 - cols, position.current.x - Math.floor(cols / 2)));
       const cameraY = Math.max(0, Math.min(39 - rows, position.current.y - Math.floor(rows / 2)));
       const terrainKey = [rect.width, rect.height, cameraX, cameraY].join(':');
@@ -111,12 +203,11 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
           const worldX = x + cameraX, worldY = y + cameraY;
           const terrain = getTile(worldX, worldY);
           const biome = Math.floor((worldX + worldY) / 12) % 4;
-          staticCtx.fillStyle = terrain.kind === 'water' ? '#102f4a' : terrain.kind === 'rock' ? '#30364a' : terrain.kind === 'wall' ? '#070b13' : biome === 0 ? '#101b30' : biome === 1 ? '#172536' : biome === 2 ? '#182d28' : '#241f32';
-          staticCtx.fillRect(x*tile,y*tile,tile,tile);
+          drawPixelTile(staticCtx, terrain.kind, biome, x * tile, y * tile, tile, worldX * 97 + worldY * 193 + biome * 17);
           if (terrain.kind !== 'ground') {
-            staticCtx.strokeStyle = terrain.kind === 'wall' ? '#202b40' : '#53627b';
-            staticCtx.lineWidth = 1;
-            staticCtx.strokeRect(x*tile+1,y*tile+1,tile-2,tile-2);
+            staticCtx.strokeStyle = terrain.kind === 'wall' ? '#0b0f18' : 'rgba(7,12,20,.45)';
+            staticCtx.lineWidth = 2;
+            staticCtx.strokeRect(x * tile + 1, y * tile + 1, tile - 2, tile - 2);
           }
         }
         staticKey = terrainKey;
@@ -270,8 +361,29 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
       dynamicCtx.globalAlpha = 0.7;
       dynamicCtx.fillStyle = '#d8e5ff'; dynamicCtx.beginPath(); dynamicCtx.arc(px, py, 2 + pulse * 1.5, 0, Math.PI * 2); dynamicCtx.fill();
       dynamicCtx.restore();
-      dynamicCtx.fillStyle='#fff'; dynamicCtx.beginPath(); dynamicCtx.arc(px,py,9,0,Math.PI*2); dynamicCtx.fill();
-      dynamicCtx.strokeStyle='#9db4e8'; dynamicCtx.stroke(); dynamicCtx.fillStyle='#c9d7f5'; dynamicCtx.font='600 11px Inter,sans-serif'; dynamicCtx.fillText('PLAYER',px-22,py+24);
+      // Petit sprite pixel-art 64×64 : le personnage reste lisible même sans sprites externes.
+      const bob = Math.round(Math.sin(fxTime.current / 150) * 2);
+      const sx = Math.round(px - tile * 0.20);
+      const sy = Math.round(py - tile * 0.30 + bob);
+      dynamicCtx.fillStyle = '#101827';
+      dynamicCtx.fillRect(sx + 7, sy + 10, 18, 27);
+      dynamicCtx.fillStyle = '#6b4329';
+      dynamicCtx.fillRect(sx + 10, sy + 2, 12, 12);
+      dynamicCtx.fillStyle = '#2f8de4';
+      dynamicCtx.fillRect(sx + 8, sy + 14, 16, 14);
+      dynamicCtx.fillStyle = '#dce7ff';
+      dynamicCtx.fillRect(sx + 12, sy + 5, 8, 6);
+      dynamicCtx.fillStyle = '#17375d';
+      dynamicCtx.fillRect(sx + 10, sy + 27, 5, 10);
+      dynamicCtx.fillRect(sx + 19, sy + 27, 5, 10);
+      dynamicCtx.fillStyle = '#f0c58a';
+      dynamicCtx.fillRect(sx + 4, sy + 16, 5, 10);
+      dynamicCtx.fillRect(sx + 24, sy + 16, 5, 10);
+      dynamicCtx.fillStyle = '#d8b56a';
+      dynamicCtx.fillRect(sx + 26, sy + 13, 3, 18);
+      dynamicCtx.fillStyle = '#fff';
+      dynamicCtx.font='600 10px Inter,sans-serif';
+      dynamicCtx.fillText('PLAYER',px-22,py+34);
     };
     let frame = 0;
     let lastFrame = performance.now();
