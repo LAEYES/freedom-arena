@@ -40,9 +40,10 @@ function enemyTurn(state:CombatState):CombatState{
  const base=damage(state.enemy.attack,state.player.defense);
  const weakened=(state.enemyEffects.weakened??0)>0;
  const dealt=state.guarding?Math.max(1,Math.floor(base*.5)):Math.max(1,weakened?Math.floor(base*.75):base);
+ const nextEnemyEffects={...state.enemyEffects,weakened:Math.max(0,(state.enemyEffects.weakened??0)-1)};
  const guardLog=state.guarding?' Guard absorbs part of the impact.':'';
  const playerHp=Math.max(0,state.player.hp-dealt);
- if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),playerEffects:{...state.playerEffects,weakened:Math.max(0,(state.playerEffects.weakened??0)-1)},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog} Defeat.`]};
+ if(playerHp===0)return {...state,player:{...state.player,hp:0},status:'defeat',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),enemyEffects:nextEnemyEffects,playerEffects:{...state.playerEffects},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog} Defeat.`]};
  return {...state,player:{...state.player,hp:playerHp},turn:'player',guarding:false,heavyCooldown:Math.max(0,state.heavyCooldown-1),playerEffects:{...state.playerEffects,weakened:Math.max(0,(state.playerEffects.weakened??0)-1)},log:[...state.log,`${state.enemy.name} deals ${dealt} damage.${guardLog}`]};
 }
 export function getCombatReward(state:CombatState):number{return state.status==='victory'?25+state.enemy.level*10:0;}
