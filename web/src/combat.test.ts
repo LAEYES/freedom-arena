@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEncounter, getCombatPerformance, getCombatReward, playerAttack } from './combat';
+import { createEncounter, getCombatPerformance, getCombatReward, playerAttack, playerGuard, playerHeavyStrike } from './combat';
 
 describe('combat system', () => {
   it('creates deterministic encounters from level, threat and faction inputs', () => {
@@ -31,3 +31,23 @@ describe('combat system', () => {
     expect(getCombatPerformance(victory)).toBeGreaterThan(0);
   });
 });
+
+
+  it('guard reduces the next incoming damage', () => {
+    const encounter = createEncounter(5, 1, { faction: 'Aegis' });
+    const guarded = playerGuard(encounter);
+    expect(guarded.turn).toBe('player');
+    expect(guarded.player.hp).toBeGreaterThan(0);
+    expect(encounter.player.hp - guarded.player.hp).toBeLessThan(
+      encounter.enemy.attack - Math.floor(encounter.player.defense * 0.6)
+    );
+  });
+
+  it('heavy strike consumes a turn and starts a cooldown', () => {
+    const encounter = createEncounter(10, 1, { faction: 'Aegis' });
+    const next = playerHeavyStrike(encounter);
+    expect(next.turn).toBe('player');
+    expect(next.enemy.hp).toBeLessThan(encounter.enemy.hp);
+    expect(next.heavyCooldown).toBeGreaterThan(0);
+    expect(playerHeavyStrike(next)).toBe(next);
+  });
