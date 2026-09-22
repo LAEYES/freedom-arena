@@ -102,6 +102,72 @@ function drawPixelTile(
   }
 }
 
+
+function drawPixelCharacter(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  accent: string,
+  hostile = false,
+) {
+  const s = Math.max(16, Math.floor(size));
+  const px = Math.max(2, Math.floor(s / 16));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,.42)';
+  ctx.fillRect(x - px * 4, y + px * 5, px * 8, px * 2);
+  // legs
+  ctx.fillStyle = '#101521';
+  ctx.fillRect(x - px * 4, y + px * 2, px * 3, px * 5);
+  ctx.fillRect(x + px, y + px * 2, px * 3, px * 5);
+  // body / armor
+  ctx.fillStyle = hostile ? '#5b2630' : '#26354d';
+  ctx.fillRect(x - px * 5, y - px * 2, px * 10, px * 6);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - px * 3, y - px, px * 6, px * 3);
+  // arms
+  ctx.fillStyle = '#151c29';
+  ctx.fillRect(x - px * 7, y - px, px * 2, px * 5);
+  ctx.fillRect(x + px * 5, y - px, px * 2, px * 5);
+  // head
+  ctx.fillStyle = '#c49a7a';
+  ctx.fillRect(x - px * 4, y - px * 8, px * 8, px * 6);
+  // helmet
+  ctx.fillStyle = '#202b3e';
+  ctx.fillRect(x - px * 5, y - px * 9, px * 10, px * 3);
+  ctx.fillStyle = accent;
+  ctx.fillRect(x - px * 3, y - px * 6, px * 6, px);
+  // sword / tool
+  ctx.fillStyle = '#d7e0ee';
+  ctx.fillRect(x + px * 7, y - px * 7, px, px * 10);
+  ctx.fillStyle = '#8c9ab0';
+  ctx.fillRect(x + px * 5, y + px * 2, px * 5, px);
+  ctx.restore();
+}
+
+function drawPixelPoi(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  const s = Math.max(20, Math.floor(size));
+  const px = Math.max(2, Math.floor(s / 16));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = 'rgba(0,0,0,.38)';
+  ctx.fillRect(x - px * 6, y + px * 5, px * 12, px * 2);
+  ctx.fillStyle = '#182236';
+  ctx.fillRect(x - px * 7, y - px * 5, px * 14, px * 10);
+  ctx.fillStyle = '#344968';
+  ctx.fillRect(x - px * 5, y - px * 7, px * 10, px * 3);
+  ctx.fillStyle = '#d8b56a';
+  ctx.fillRect(x - px * 3, y - px * 2, px * 2, px * 4);
+  ctx.fillRect(x + px, y - px * 2, px * 2, px * 4);
+  ctx.fillStyle = '#75a7d8';
+  ctx.fillRect(x - px * 2, y + px * 3, px * 4, px * 2);
+  ctx.fillStyle = '#101621';
+  ctx.fillRect(x - px * 7, y + px * 4, px * 14, px * 2);
+  ctx.restore();
+}
+
 function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources, explorationCount, factionInfluence, worldEvent, worldEventAge, remotePlayers, onTileMove, onSignalSelect }: { zoneId: string; waypoint: {x:number;y:number}|null; worldTile: {x:number;y:number}; worldThreat: number; worldResources: number; explorationCount: number; factionInfluence: number; worldEvent: import('./world').WorldEvent; worldEventAge: number; remotePlayers: ZonePresence[]; onTileMove: (tileX: number, tileY: number) => void; onSignalSelect: (signal: {type:'poi'|'npc'|'event'; name:string; x:number; y:number}) => void }) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const dynamicRef = useRef<HTMLCanvasElement>(null);
