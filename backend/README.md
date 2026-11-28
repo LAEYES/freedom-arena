@@ -112,3 +112,17 @@ Authenticated clients call `POST /world/:zoneId/command` with only:
 ```
 
 The client cannot submit a victory flag, enemy level, XP, resources, or damage. The Worker obtains the authenticated subject, verifies that the player is present in the requested zone, computes the encounter outcome using server-side randomness and the stored player level, then applies the result and records the command in a D1 batch. The command ID is an idempotency key; retries return the stored result. This is a minimal vertical slice, not a complete combat simulation: enemy AI, equipment-derived stats, PvP rules, loot tables and anti-collusion controls remain future work.
+
+
+## FA-WORLD-037 combat simulation
+
+The combat resolver is a pure server-side module in `combatEngine.ts`. It loads the equipped card from the authenticated player's D1 record; the request body cannot provide combat stats, actions, enemy parameters, rolls or rewards. Card values are bounded before use. The simulation uses server-generated random rolls, speed-based turn order, normal/heavy attacks, a periodic enemy guard, a player skill that exposes the enemy, and a hard 12-round cap. The complete combat log and computed reward are persisted in the existing idempotent command outcome.
+
+Run the backend checks and combat tests from `backend/`:
+
+```bash
+npm run check
+npm test
+```
+
+This remains a PvE prototype. It does not yet implement equipment slots beyond one equipped card, card-specific skill definitions, persistent health, status-effect catalogues, PvP, loot tables, inventory transactions, private-zone ACLs or edge-level DDoS protection. No migration is required for FA-WORLD-037 because the existing `players.cards` / `equipped_card_id` columns and `world_command_log.outcome_json` store the required data.
