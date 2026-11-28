@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, type EquipmentSlot, type StoredCard } from './combatEngine';
+import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, resolveVictoryLoot, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -160,7 +160,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip|inventory)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
@@ -311,7 +311,8 @@ export default {
           );
           const nextXp = player.xp + outcome.xpAwarded;
           const nextLevel = 1 + Math.floor(nextXp / 100);
-          const resultJson = JSON.stringify(outcome);
+          const loot = resolveVictoryLoot(outcome.victory, rolls);
+          const resultJson = JSON.stringify({ ...outcome, loot });
 
           const results = await env.DB.batch([
             env.DB.prepare(`UPDATE players SET xp=?,level=?,victories=victories+?,
@@ -323,6 +324,13 @@ export default {
             env.DB.prepare(`INSERT INTO world_command_log(command_id,player_id,zone_id,command_type,outcome_json)
               SELECT ?,?,?, 'combat',? WHERE changes()=1`)
               .bind(body.commandId, identity.subject, zoneId, resultJson),
+            ...loot.map(drop => env.DB.prepare(`INSERT INTO world_inventory(player_id,item_id,quantity,updated_at)
+              SELECT ?,?,?,CURRENT_TIMESTAMP WHERE EXISTS(SELECT 1 FROM world_command_log WHERE command_id=? AND player_id=?)
+              ON CONFLICT(player_id,item_id) DO UPDATE SET quantity=MIN(999,world_inventory.quantity+excluded.quantity),updated_at=CURRENT_TIMESTAMP`)
+              .bind(identity.subject, drop.itemId, drop.quantity, body.commandId, identity.subject)),
+            ...loot.map(drop => env.DB.prepare(`INSERT INTO world_inventory_log(command_id,player_id,zone_id,item_id,quantity,reason)
+              SELECT ?,?,?,?,?, 'combat_loot' WHERE EXISTS(SELECT 1 FROM world_command_log WHERE command_id=? AND player_id=? )`)
+              .bind(body.commandId + ":" + drop.itemId, identity.subject, zoneId, drop.itemId, drop.quantity, body.commandId, identity.subject)),
           ]);
           if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
             const duplicate = await env.DB.prepare(
