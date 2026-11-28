@@ -1,6 +1,7 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
+import { verifySupabaseBearer, type AuthEnv } from './auth';
 
-export interface Env {
+export interface Env extends AuthEnv {
   DB: D1Database;
 }
 
@@ -8,7 +9,7 @@ const headers = {
   "content-type": "application/json; charset=utf-8",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "content-type,authorization",
 };
 
 const json = (body: unknown, status = 200) =>
@@ -86,6 +87,24 @@ const presencePayload = (row: WorldPresenceRow) => ({
   updatedAt: row.updated_at,
 });
 
+
+async function enforceRateLimit(db: D1Database, subject: string, routeKey: string): Promise<boolean> {
+  const windowStart = Math.floor(Date.now() / 60_000);
+  try {
+    const row = await db.prepare(`INSERT INTO api_rate_limits(subject,route_key,window_start,request_count)
+      VALUES(?,?,?,1)
+      ON CONFLICT(subject,route_key,window_start) DO UPDATE SET request_count=request_count+1
+      RETURNING request_count`).bind(subject, routeKey, windowStart).first<{ request_count: number }>();
+    if (windowStart % 10 === 0) {
+      await db.prepare('DELETE FROM api_rate_limits WHERE window_start < ?').bind(windowStart - 10).run();
+    }
+    return Number(row?.request_count ?? 0) <= 60;
+  } catch {
+    // Fail closed: a missing migration or D1 error must not silently disable throttling.
+    return false;
+  }
+}
+
 const parseJson = <T>(value: unknown, fallback: T): T => {
   try {
     return JSON.parse(String(value ?? "")) as T;
@@ -126,6 +145,16 @@ export default {
       return json({ ok: true, service: "freedom-arena-api", worldSync: "v1" });
     }
 
+    const identity = await verifySupabaseBearer(request, env);
+    if (!identity) {
+      const configured = Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_JWT_ISSUER?.trim());
+      return json({ error: configured ? "unauthorized" : "auth_not_configured" }, configured ? 401 : 503);
+    }
+    const routeFamily = url.pathname.startsWith('/world/') ? 'world' : url.pathname === '/player' ? 'player' : 'other';
+    if (!await enforceRateLimit(env.DB, identity.subject, routeFamily)) {
+      return json({ error: "rate_limited_or_security_migration_missing" }, 429);
+    }
+
     const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
@@ -154,7 +183,7 @@ export default {
 
       if (request.method === "POST" && action === "join") {
         const body = await request.json().catch(() => null) as { playerId?: unknown; worldTile?: unknown } | null;
-        if (!validPlayerId(body?.playerId) || !isWorldPosition(body?.worldTile)) {
+        if (!validPlayerId(body?.playerId) || body?.playerId !== identity.subject || !isWorldPosition(body?.worldTile)) {
           return json({ error: "invalid_world_join" }, 400);
         }
         if (!isServerTraversable(body.worldTile.x, body.worldTile.y)) {
@@ -182,7 +211,7 @@ export default {
         const body = await request.json().catch(() => null) as {
           playerId?: unknown; from?: unknown; to?: unknown; expectedRevision?: unknown;
         } | null;
-        if (!body || !validPlayerId(body.playerId) || !isWorldPosition(body.from) || !isWorldPosition(body.to)
+        if (!body || !validPlayerId(body.playerId) || body.playerId !== identity.subject || !isWorldPosition(body.from) || !isWorldPosition(body.to)
           || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0) {
           return json({ error: "invalid_world_move" }, 400);
         }
@@ -225,7 +254,7 @@ export default {
 
       if (request.method === "POST" && action === "heartbeat") {
         const body = await request.json().catch(() => null) as { playerId?: unknown } | null;
-        if (!validPlayerId(body?.playerId)) return json({ error: "invalid_player_id" }, 400);
+        if (!validPlayerId(body?.playerId) || body?.playerId !== identity.subject) return json({ error: "invalid_player_id" }, 400);
         try {
           const row = await env.DB.prepare(`UPDATE world_player_presence SET updated_at=CURRENT_TIMESTAMP
             WHERE player_id=? AND zone_id=?
@@ -238,6 +267,7 @@ export default {
       }
 
       if (request.method === "POST" && action === "state") {
+        return json({ error: "client_zone_state_writes_disabled" }, 403);
         const body = await request.json().catch(() => null) as { expectedRevision?: unknown; state?: unknown } | null;
         if (!body || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0
           || !body.state || typeof body.state !== 'object' || Array.isArray(body.state)) {
@@ -273,6 +303,7 @@ export default {
     if (url.pathname === "/player" && request.method === "GET") {
       const id = url.searchParams.get("id");
       if (!id) return json({ error: "missing id" }, 400);
+      if (id !== identity.subject) return json({ error: "forbidden_player_id" }, 403);
       try {
         const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
         return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
@@ -282,6 +313,7 @@ export default {
     }
 
     if (url.pathname === "/player" && request.method === "POST") {
+      return json({ error: "client_player_state_writes_disabled" }, 403);
       const body = await request.json().catch(() => null) as { id?: string; player?: PlayerPayload } | null;
       const id = body?.id?.trim();
       if (!id || !body?.player) return json({ error: "invalid payload" }, 400);
