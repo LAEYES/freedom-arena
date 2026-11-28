@@ -98,10 +98,8 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttacki
       const clickY = event.clientY - rect.top;
       const cols = Math.ceil(rect.width / tile);
       const rows = Math.ceil(rect.height / tile);
-      const visualCameraX = playerVisual.current.initialized ? playerVisual.current.x : position.current.x;
-      const visualCameraY = playerVisual.current.initialized ? playerVisual.current.y : position.current.y;
-      const cameraX = Math.max(0, Math.min(59 - cols, visualCameraX - Math.floor(cols / 2)));
-      const cameraY = Math.max(0, Math.min(39 - rows, visualCameraY - Math.floor(rows / 2)));
+      const cameraX = Math.max(0, Math.min(59 - cols, position.current.x - Math.floor(cols / 2)));
+      const cameraY = Math.max(0, Math.min(39 - rows, position.current.y - Math.floor(rows / 2)));
       const zone = getZone(zoneId);
       const npcs = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
       const eventPoint = getWorldEventPoint(worldEvent);
@@ -160,8 +158,14 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttacki
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const tile = RENDER_TILE_SIZE, cols = Math.ceil(rect.width / tile), rows = Math.ceil(rect.height / tile);
-      const cameraX = Math.max(0, Math.min(59 - cols, position.current.x - Math.floor(cols / 2)));
-      const cameraY = Math.max(0, Math.min(39 - rows, position.current.y - Math.floor(rows / 2)));
+      const frameDelta = Math.min(50, Math.max(0, deltaMs));
+      const smoothing = 1 - Math.exp(-10 * frameDelta / 1000);
+      const localVisual = playerVisual.current;
+      if (!localVisual.initialized) { localVisual.x = position.current.x; localVisual.y = position.current.y; localVisual.initialized = true; }
+      localVisual.x += (position.current.x - localVisual.x) * smoothing;
+      localVisual.y += (position.current.y - localVisual.y) * smoothing;
+      const cameraX = Math.max(0, Math.min(59 - cols, localVisual.x - Math.floor(cols / 2)));
+      const cameraY = Math.max(0, Math.min(39 - rows, localVisual.y - Math.floor(rows / 2)));
       const terrainKey = [rect.width, rect.height, cameraX, cameraY].join(':');
       if (staticKey !== terrainKey) {
         staticCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -288,12 +292,6 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttacki
       }
       const activeIds = new Set(currentRemotePlayers.map(remote => remote.playerId));
       Object.keys(remoteVisuals.current).forEach(id => { if (!activeIds.has(id)) delete remoteVisuals.current[id]; });
-      const frameDelta = Math.min(50, Math.max(0, deltaMs));
-      const smoothing = 1 - Math.exp(-10 * frameDelta / 1000);
-      const localVisual = playerVisual.current;
-      if (!localVisual.initialized) { localVisual.x = position.current.x; localVisual.y = position.current.y; localVisual.initialized = true; }
-      localVisual.x += (position.current.x - localVisual.x) * smoothing;
-      localVisual.y += (position.current.y - localVisual.y) * smoothing;
       currentRemotePlayers.forEach(remote=>{
         const visual = remoteVisuals.current[remote.playerId] ?? (remoteVisuals.current[remote.playerId] = { x: remote.worldTile.x, y: remote.worldTile.y, trail: [] });
         const previousX = visual.x;
