@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type PointerEvent, type WheelEvent, type KeyboardEvent } from 'react';
 import { cameraModeIndex, clampCameraZoom, normalizeCameraRotation, type CameraMode, type CameraState } from './camera';
 
 type Props = {
@@ -36,11 +36,11 @@ function addGround(out:number[]) {
 export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1, onCameraChange }: Props) {
   const ref=useRef<HTMLCanvasElement>(null);
   const pointerRef=useRef<{id:number;x:number}|null>(null);
-  const onPointerDown=(event:React.PointerEvent<HTMLCanvasElement>)=>{pointerRef.current={id:event.pointerId,x:event.clientX};event.currentTarget.setPointerCapture(event.pointerId);};
+  const onPointerDown=(event:PointerEvent<HTMLCanvasElement>)=>{pointerRef.current={id:event.pointerId,x:event.clientX};event.currentTarget.setPointerCapture(event.pointerId);};
   const onPointerMove=(event:React.PointerEvent<HTMLCanvasElement>)=>{const pointer=pointerRef.current;if(!pointer||pointer.id!==event.pointerId)return;const delta=event.clientX-pointer.x;pointer.x=event.clientX;if(Math.abs(delta)>0)onCameraChange?.({rotation:cameraRotation+delta*0.008});};
   const onPointerUp=(event:React.PointerEvent<HTMLCanvasElement>)=>{if(pointerRef.current?.id===event.pointerId)pointerRef.current=null;};
-  const onWheel=(event:React.WheelEvent<HTMLCanvasElement>)=>{event.preventDefault();onCameraChange?.({zoom:zoom+(event.deltaY<0?0.08:-0.08)});};
-  const onKeyDown=(event:React.KeyboardEvent<HTMLCanvasElement>)=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();onCameraChange?.({rotation:cameraRotation+(event.key==='ArrowLeft'?-1:1)*Math.PI/12});}else if(event.key==='+'||event.key==='='){event.preventDefault();onCameraChange?.({zoom:zoom+0.1});}else if(event.key==='-'){event.preventDefault();onCameraChange?.({zoom:zoom-0.1});}};
+  const onWheel=(event:WheelEvent<HTMLCanvasElement>)=>{event.preventDefault();onCameraChange?.({zoom:zoom+(event.deltaY<0?0.08:-0.08)});};
+  const onKeyDown=(event:KeyboardEvent<HTMLCanvasElement>)=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();onCameraChange?.({rotation:cameraRotation+(event.key==='ArrowLeft'?-1:1)*Math.PI/12});}else if(event.key==='+'||event.key==='='){event.preventDefault();onCameraChange?.({zoom:zoom+0.1});}else if(event.key==='-'){event.preventDefault();onCameraChange?.({zoom:zoom-0.1});}};
 
   useEffect(()=>{
     if(!enabled)return;
