@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findNpcCoverPositions, findNpcDirectionalCoverPositions } from './npcCover';
+import { findNpcCoverPositions, findNpcDirectionalCoverPositions, planNpcDirectionalCoverRoute } from './npcCover';
 import { generateTerrainMap } from './terrain';
 
 const baseMap = generateTerrainMap({ width: 32, height: 32, seed: 77, spawnI: 16, spawnJ: 16, spawnSafeRadius: 15 });
@@ -42,6 +42,15 @@ describe('NPC defensive terrain positions', () => {
       .toBe(findNpcCoverPositions(map, { i: 16, j: 16 }, 5).length);
     expect(findNpcCoverPositions(map, { i: 16, j: 16 }, 100).length)
       .toBe(findNpcCoverPositions(map, { i: 16, j: 16 }, 12).length);
+  });
+
+  it('returns an A* route to reachable directional cover', () => {
+    const route = planNpcDirectionalCoverRoute(map, { i: 16, j: 16 }, { i: 20, j: 16 }, 12);
+    expect(route).not.toBeNull();
+    expect(route?.path.length).toBeGreaterThan(1);
+    expect(route?.path[0]).toMatchObject({ i: 16, j: 16 });
+    expect(route?.path[route.path.length - 1]).toEqual(route?.position);
+    expect(route?.blocksThreatLineOfSight).toBe(true);
   });
 
   it('ranks hard cover that blocks the threat line ahead of exposed positions', () => {
