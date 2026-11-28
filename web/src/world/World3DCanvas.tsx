@@ -249,7 +249,7 @@ export function World3DCanvas({
   const bridgeTileKeys = useMemo(() => getBridgeTileKeys(bridgeLinks), [bridgeLinks]);
   const settlementDistricts = useMemo(() => zone.pointsOfInterest.map((name, index) => {
     const anchor = getPoiPosition(zone, index);
-    return generateSettlementDistrict(terrainMap, zone.id + ':settlement:' + index, name + ' District', anchor, terrainMap.seed + index * 104729);
+    return generateSettlementDistrict(terrainMap, zone.id + ':settlement:' + index, name + ' District', { i: anchor.x, j: anchor.y }, terrainMap.seed + index * 104729);
   }).filter((district): district is NonNullable<typeof district> => district !== null), [terrainMap, zoneId]);
   const initialNpcAgents = useMemo(() => createNpcAgents(terrainMap, sceneNpcs), [terrainMap, sceneNpcs]);
   useEffect(() => {
