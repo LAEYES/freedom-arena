@@ -282,3 +282,18 @@ Fresh databases receive the same tables through `schema.sql`.
 - `GET /world/:zoneId/pvp/rating` returns the authenticated player's rating and W/L/D totals.
 
 Existing D1 rollout order: migrations 009, 010, then 011. Do not deploy until CI passes and migrations are applied. No remote migration, deployment or merge is performed by this change.
+
+
+## FA-WORLD-046 PvP integrity and immutable loadouts
+
+Apply migration 012 after migration 011:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/012_fa_world_046_pvp_integrity.sql
+```
+
+At matchmaking, the Worker reads each participant's authoritative level, owned cards, equipment and equipment revision, computes bounded combat statistics, and persists an immutable per-match snapshot. Initial combat state is built from those snapshots; later actions never recalculate stats from mutable player records. Equipment updates are rejected while a player has an active PvP lock. Snapshot rows reject UPDATE and DELETE through SQLite triggers.
+
+The Worker records command-ID reuse across actors/matches and out-of-turn action attempts in `pvp_security_events`. Reuse returns HTTP 409 and does not expose the original command result. The security log stores event type, severity and bounded structured details. These signals are audit events, not an automated ban or collusion verdict; shared-device/network false positives and organized win-trading analysis require separate policy and evidence.
+
+Run `npm run check` and `npm test` in `backend/`. This PR does not apply migrations remotely, deploy the Worker, merge the PR, or claim production concurrency certification.
