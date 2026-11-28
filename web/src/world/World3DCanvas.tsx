@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager } from './chunks';
-import { findTerrainPath } from './navigation';
+import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
-import { tileKey } from './navigation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -518,7 +517,8 @@ export function World3DCanvas({
         if (tile) {
           const npcIndex = sceneNpcs.findIndex((actor, index) => {
             const behavior = npcBehaviorAgentsRef.current[index];
-            const pose = behavior ? getNpcBehaviorPose(behavior) : patrolPoses[index];
+            const patrol = npcAgentsRef.current[index];
+            const pose = behavior ? getNpcBehaviorPose(behavior) : patrol ? getNpcAgentPose(patrol) : null;
             return pose && Math.round(pose.x) === tile.i && Math.round(pose.y) === tile.j;
           });
           const npc = npcIndex >= 0 ? sceneNpcs[npcIndex] : undefined;
