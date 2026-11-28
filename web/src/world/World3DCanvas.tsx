@@ -4,6 +4,7 @@ import { ChunkManager } from './chunks';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
+import { canNpcPerceivePlayer } from './npcPerception';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -370,11 +371,19 @@ export function World3DCanvas({
           if (!patrolAgent) continue;
           const patrolPose = patrolPoses[index];
           let behaviorAgent = npcBehaviorAgentsRef.current[index];
-          if (!behaviorAgent && Math.abs(Math.round(patrolPose.x) - playerTile.i) + Math.abs(Math.round(patrolPose.y) - playerTile.j) <= 7) {
+          if (!behaviorAgent) {
             const patrolTile = { i: Math.round(patrolPose.x), j: Math.round(patrolPose.y) };
-            const home = { i: actor.x, j: actor.y };
-            const created = createNpcBehaviorAgent(actor.id, home);
-            behaviorAgent = { ...created, position: patrolTile, previousPosition: patrolTile };
+            const patrolFrom = patrolAgent.path[patrolAgent.fromIndex];
+            const patrolTo = patrolAgent.path[patrolAgent.toIndex] ?? patrolFrom;
+            const patrolFacing = { i: patrolTo.i - patrolFrom.i, j: patrolTo.j - patrolFrom.j };
+            if (canNpcPerceivePlayer(terrainMap, patrolTile, patrolFacing, playerTile, { radius: 7, halfAngleDegrees: 60 })) {
+              const home = { i: actor.x, j: actor.y };
+              const created = createNpcBehaviorAgent(actor.id, home);
+              behaviorAgent = {
+                ...created, position: patrolTile, previousPosition: patrolTile,
+                facing: patrolFacing,
+              };
+            }
           }
 
           let pose = patrolPose;
