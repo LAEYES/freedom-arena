@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ChunkManager, buildWorldChunk, getChunkBounds, getChunkCoordinate, isChunkVisibleInCamera } from './chunks';
+import { ChunkManager, ChunkStreamScheduler, buildWorldChunk, getChunkBounds, getChunkCoordinate, isChunkVisibleInCamera } from './chunks';
 import { createIsometricCamera } from './isometricCamera';
 import { generateTerrainMap } from './terrain';
 
@@ -89,6 +89,59 @@ describe('world chunk manager', () => {
     expect(isChunkVisibleInCamera(nearChunk, camera)).toBe(true);
     expect(isChunkVisibleInCamera(rearChunk, camera)).toBe(false);
     expect(() => isChunkVisibleInCamera(nearChunk, camera, -1)).toThrow(RangeError);
+  });
+
+  it('streams nearest chunks incrementally within the per-frame load budget', () => {
+    const map = generateTerrainMap();
+    const manager = new ChunkManager(map);
+    const streamer = new ChunkStreamScheduler(manager, map);
+    streamer.requestAround({ i: 32, j: 32 }, 1);
+
+    const first = streamer.tick(16, 2);
+    expect(first.loadedThisFrame).toBe(2);
+    expect(first.pending).toBe(7);
+    expect(first.chunks).toHaveLength(2);
+    expect(first.chunks[0].key).toBe('1:1');
+    expect(first.chunks[1].key).toBe('2:1');
+
+    const second = streamer.tick(16, 2);
+    expect(second.loadedThisFrame).toBe(2);
+    expect(second.chunks).toHaveLength(4);
+    expect(streamer.getOpacity('1:1')).toBeCloseTo(32 / 220);
+  });
+
+  it('reprioritizes pending chunks when the player crosses into another chunk', () => {
+    const map = generateTerrainMap();
+    const manager = new ChunkManager(map);
+    const streamer = new ChunkStreamScheduler(manager, map);
+    streamer.requestAround({ i: 8, j: 8 }, 1);
+    streamer.tick(16, 1);
+    streamer.requestAround({ i: 40, j: 40 }, 0);
+    const frame = streamer.tick(16, 1);
+    expect(frame.pending).toBe(0);
+    expect(frame.chunks.map(chunk => chunk.key)).toEqual(['2:2']);
+    expect(streamer.getOpacity('0:0')).toBe(0);
+  });
+
+  it('keeps loaded chunks visible during the fade and reaches full opacity', () => {
+    const map = generateTerrainMap();
+    const streamer = new ChunkStreamScheduler(new ChunkManager(map), map, { transitionDurationMs: 100 });
+    streamer.requestAround({ i: 4, j: 4 }, 0);
+    expect(streamer.tick(0, 1).chunks).toHaveLength(1);
+    expect(streamer.getOpacity('0:0')).toBe(0);
+    streamer.tick(50, 0);
+    expect(streamer.getOpacity('0:0')).toBeCloseTo(0.5);
+    streamer.tick(80, 0);
+    expect(streamer.getOpacity('0:0')).toBe(1);
+  });
+
+  it('rejects invalid streaming budgets and transition durations', () => {
+    const map = generateTerrainMap();
+    expect(() => new ChunkStreamScheduler(new ChunkManager(map), map, { transitionDurationMs: 0 })).toThrow(RangeError);
+    const streamer = new ChunkStreamScheduler(new ChunkManager(map), map);
+    expect(() => streamer.requestAround({ i: -1, j: 0 }, 1)).toThrow(RangeError);
+    expect(() => streamer.tick(16, -1)).toThrow(RangeError);
+    expect(() => streamer.tick(Number.NaN, 1)).toThrow(RangeError);
   });
 
   it('rejects invalid chunk sizes, centres and radii', () => {
