@@ -14,10 +14,10 @@ describe('Freedom Arena character sprite factory', () => {
     expect(getCharacterLayerProfile('Eclipse','mystic')).toMatchObject({ weapon: 'staff', energy: '#e5c6ff' });
   });
   it('maps equipped card rarity to deterministic cosmetic armor tiers', () => {
-    expect(getCharacterEquipmentVisual('Common', 1, 1, 1)).toBeUndefined();
-    expect(getCharacterEquipmentVisual('Rare', 1, 1, 1)).toEqual({ tier: 1, accent: '#75c9dc' });
-    expect(getCharacterEquipmentVisual('Epic', 1, 1, 1)).toEqual({ tier: 2, accent: '#c49be7' });
-    expect(getCharacterEquipmentVisual('Legendary', 1, 1, 1)).toEqual({ tier: 3, accent: '#f4c96b' });
+    expect(getCharacterEquipmentVisual('Common')).toBeUndefined();
+    expect(getCharacterEquipmentVisual('Rare')).toEqual({ tier: 1, accent: '#75c9dc' });
+    expect(getCharacterEquipmentVisual('Epic')).toEqual({ tier: 2, accent: '#c49be7' });
+    expect(getCharacterEquipmentVisual('Legendary')).toEqual({ tier: 3, accent: '#f4c96b' });
   });
   it('normalizes negative and large frame indices', () => {
     expect(getCharacterFrameOffset('walk',-1)).toBe(-2);
