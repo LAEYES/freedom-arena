@@ -120,3 +120,10 @@ FA-WORLD-036: deterministic day/night + weather lighting profiles, derivative-ba
 FA-WORLD-037: rolling RAF/CPU frame-time telemetry, optional WebGL2 disjoint GPU timer queries, bounded asynchronous query queue, GPU-time hysteresis and adaptive backing resolution; device-specific benchmark captures remain pending.
 
 No merge or deployment is authorized by completion of these tasks.
+
+## FA-WORLD-038 — Animation procédurale des acteurs
+- Contrat commun de poses déterministes pour idle, marche, course, attaque, garde, impact et chute.
+- Avatar joueur: 17 primitives low-poly avec lame courte et bouclier attachés visuellement; inclinaison du torse et articulation des bras.
+- PNJ: animation pilotée par leur état de comportement (CHASE illustré par une attaque, ALERT par une garde), sans création de dégâts ni hitbox.
+- LOD d'animation par distance: full ≤12 cases, reduced ≤28, static au-delà.
+- Les poses sont purement visuelles; navigation, collision, état autoritaire et règles de combat restent inchangés.
