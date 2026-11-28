@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { resolveServerCombat } from './gameCommands';
+import { resolveCombatEncounter, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -281,9 +281,10 @@ export default {
           if (prior) return json({ outcome: parseObject(prior.outcome_json), replayed: true });
 
           const player = await env.DB.prepare(
-            "SELECT level,xp,victories,world_resources,world_threat FROM players WHERE id=?"
+            "SELECT level,xp,victories,world_resources,world_threat,cards,equipped_card_id FROM players WHERE id=?"
           ).bind(identity.subject).first<{
             level: number; xp: number; victories: number; world_resources: number; world_threat: number;
+            cards: string; equipped_card_id: string | null;
           }>();
           if (!player) return json({ error: "player_not_initialized" }, 409);
 
@@ -292,9 +293,14 @@ export default {
           ).bind(identity.subject, zoneId).first<{ present: number }>();
           if (!presence) return json({ error: "player_not_in_zone" }, 403);
 
-          const randomBytes = new Uint32Array(1);
+          const storedCards = parseJson<StoredCard[]>(player.cards, []);
+          const safeCards = Array.isArray(storedCards) ? storedCards.slice(0, 500) : [];
+          const randomBytes = new Uint32Array(40);
           crypto.getRandomValues(randomBytes);
-          const outcome = resolveServerCombat(player.level, randomBytes[0] / 4294967296);
+          const rolls = Array.from(randomBytes, value => value / 4294967296);
+          const outcome = resolveCombatEncounter(
+            player.level, player.world_threat, safeCards, player.equipped_card_id, rolls,
+          );
           const nextXp = player.xp + outcome.xpAwarded;
           const nextLevel = 1 + Math.floor(nextXp / 100);
           const resultJson = JSON.stringify(outcome);
