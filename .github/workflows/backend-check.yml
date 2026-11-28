@@ -28,3 +28,4 @@ jobs:
           node-version: 22
       - run: npm install --no-package-lock
       - run: npm run check
+      - run: npm test
