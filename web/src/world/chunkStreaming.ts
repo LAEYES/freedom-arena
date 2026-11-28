@@ -9,6 +9,7 @@ type QueueEntry<T> = ChunkLoadRequest & {
   load: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (reason: Error) => void;
+  promise: Promise<T>;
 };
 
 export type ChunkStreamingStats = {
@@ -55,6 +56,7 @@ export class ChunkStreamingScheduler<T> {
       load,
       resolve,
       reject,
+      promise,
     };
     this.pendingByKey.set(request.key, promise);
     this.queue.push(entry);
@@ -77,7 +79,6 @@ export class ChunkStreamingScheduler<T> {
       this.pendingByKey.delete(entry.key);
       entry.reject(error);
     }
-    this.active.clear();
   }
 
   getStats(): ChunkStreamingStats {
@@ -107,7 +108,7 @@ export class ChunkStreamingScheduler<T> {
         })
         .finally(() => {
           if (this.active.get(entry.key) === entry) this.active.delete(entry.key);
-          if (this.pendingByKey.get(entry.key)) this.pendingByKey.delete(entry.key);
+          if (this.pendingByKey.get(entry.key) === entry.promise) this.pendingByKey.delete(entry.key);
           this.drain();
         });
     }
