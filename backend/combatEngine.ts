@@ -61,6 +61,7 @@ export function resolveCombatEncounter(
   cards: StoredCard[],
   equippedCardId: string | null,
   rolls: number[],
+  currentHp?: number | null,
 ): CombatEncounter {
   const level = clamp(playerLevel, 1, 100);
   const threat = clamp(worldThreat, 1, 100);
@@ -76,7 +77,9 @@ export function resolveCombatEncounter(
     speed: clamp(9 + enemyLevel + Math.floor(threat / 15), 5, 140),
   };
 
-  let playerHp = playerBase.maxHp;
+  let playerHp = currentHp === null || currentHp === undefined
+    ? playerBase.maxHp
+    : clamp(currentHp, 0, playerBase.maxHp);
   let enemyHp = enemy.maxHp;
   let enemyExposed = 0;
   let enemyGuard = 0;

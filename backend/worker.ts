@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { resolveCombatEncounter, type StoredCard } from './combatEngine';
+import { buildPlayerCombatant, resolveCombatEncounter, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -156,7 +156,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
@@ -281,10 +281,10 @@ export default {
           if (prior) return json({ outcome: parseObject(prior.outcome_json), replayed: true });
 
           const player = await env.DB.prepare(
-            "SELECT level,xp,victories,world_resources,world_threat,cards,equipped_card_id FROM players WHERE id=?"
+            "SELECT level,xp,victories,world_resources,world_threat,cards,equipped_card_id,current_hp FROM players WHERE id=?"
           ).bind(identity.subject).first<{
             level: number; xp: number; victories: number; world_resources: number; world_threat: number;
-            cards: string; equipped_card_id: string | null;
+            cards: string; equipped_card_id: string | null; current_hp: number | null;
           }>();
           if (!player) return json({ error: "player_not_initialized" }, 409);
 
@@ -293,13 +293,16 @@ export default {
           ).bind(identity.subject, zoneId).first<{ present: number }>();
           if (!presence) return json({ error: "player_not_in_zone" }, 403);
 
+          if (player.current_hp !== null && player.current_hp <= 0) {
+            return json({ error: "player_needs_rest", action: "POST /world/" + zoneId + "/rest" }, 409);
+          }
           const storedCards = parseJson<StoredCard[]>(player.cards, []);
           const safeCards = Array.isArray(storedCards) ? storedCards.slice(0, 500) : [];
           const randomBytes = new Uint32Array(40);
           crypto.getRandomValues(randomBytes);
           const rolls = Array.from(randomBytes, value => value / 4294967296);
           const outcome = resolveCombatEncounter(
-            player.level, player.world_threat, safeCards, player.equipped_card_id, rolls,
+            player.level, player.world_threat, safeCards, player.equipped_card_id, rolls, player.current_hp,
           );
           const nextXp = player.xp + outcome.xpAwarded;
           const nextLevel = 1 + Math.floor(nextXp / 100);
@@ -307,11 +310,11 @@ export default {
 
           const results = await env.DB.batch([
             env.DB.prepare(`UPDATE players SET xp=?,level=?,victories=victories+?,
-              world_resources=world_resources+?,world_threat=MAX(1,world_threat+?),updated_at=CURRENT_TIMESTAMP
+              world_resources=world_resources+?,world_threat=MAX(1,world_threat+?),current_hp=?,updated_at=CURRENT_TIMESTAMP
               WHERE id=? AND EXISTS(SELECT 1 FROM world_player_presence WHERE player_id=? AND zone_id=?)
               AND NOT EXISTS(SELECT 1 FROM world_command_log WHERE command_id=?)`)
               .bind(nextXp, nextLevel, outcome.victory ? 1 : 0, outcome.resourcesAwarded,
-                outcome.threatDelta, identity.subject, identity.subject, zoneId, body.commandId),
+                outcome.threatDelta, outcome.player.remainingHp, identity.subject, identity.subject, zoneId, body.commandId),
             env.DB.prepare(`INSERT INTO world_command_log(command_id,player_id,zone_id,command_type,outcome_json)
               SELECT ?,?,?, 'combat',? WHERE changes()=1`)
               .bind(body.commandId, identity.subject, zoneId, resultJson),
@@ -329,6 +332,35 @@ export default {
         }
       }
 
+      if (request.method === "POST" && action === "rest") {
+        const body = await request.json().catch(() => null) as { commandId?: unknown } | null;
+        if (!body || typeof body.commandId !== "string" || !/^[a-zA-Z0-9_-]{16,80}$/.test(body.commandId)) return json({ error: "invalid_rest_command" }, 400);
+        try {
+          const prior = await env.DB.prepare("SELECT hp_restored,resources_spent FROM world_rest_log WHERE command_id=? AND player_id=?").bind(body.commandId, identity.subject).first<{ hp_restored: number; resources_spent: number }>();
+          if (prior) return json({ restored: prior.hp_restored, resourcesSpent: prior.resources_spent, replayed: true });
+          const player = await env.DB.prepare("SELECT level,world_resources,cards,equipped_card_id,current_hp FROM players WHERE id=?").bind(identity.subject).first<{ level: number; world_resources: number; cards: string; equipped_card_id: string | null; current_hp: number | null }>();
+          if (!player) return json({ error: "player_not_initialized" }, 409);
+          const present = await env.DB.prepare("SELECT 1 AS present FROM world_player_presence WHERE player_id=? AND zone_id=?").bind(identity.subject, zoneId).first<{ present: number }>();
+          if (!present) return json({ error: "player_not_in_zone" }, 403);
+          if (player.world_resources < 1) return json({ error: "insufficient_world_resources" }, 409);
+          const cards = parseJson<StoredCard[]>(player.cards, []);
+          const equipped = Array.isArray(cards) ? cards.find(card => card && card.id === player.equipped_card_id) ?? null : null;
+          const maximum = buildPlayerCombatant(player.level, equipped).maxHp;
+          const current = player.current_hp === null ? maximum : Math.max(0, Math.min(maximum, player.current_hp));
+          const restored = maximum - current;
+          if (restored <= 0) return json({ error: "health_already_full" }, 409);
+          const results = await env.DB.batch([
+            env.DB.prepare("UPDATE players SET current_hp=?,world_resources=world_resources-1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND world_resources>=1 AND COALESCE(current_hp,?)<? AND EXISTS(SELECT 1 FROM world_player_presence WHERE player_id=? AND zone_id=?) AND NOT EXISTS(SELECT 1 FROM world_rest_log WHERE command_id=?)").bind(maximum, identity.subject, maximum, maximum, identity.subject, zoneId, body.commandId),
+            env.DB.prepare("INSERT INTO world_rest_log(command_id,player_id,zone_id,hp_restored,resources_spent) SELECT ?,?,?,?,1 WHERE changes()=1").bind(body.commandId, identity.subject, zoneId, restored),
+          ]);
+          if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+            const duplicate = await env.DB.prepare("SELECT hp_restored,resources_spent FROM world_rest_log WHERE command_id=? AND player_id=?").bind(body.commandId, identity.subject).first<{ hp_restored: number; resources_spent: number }>();
+            if (duplicate) return json({ restored: duplicate.hp_restored, resourcesSpent: duplicate.resources_spent, replayed: true });
+            return json({ error: "rest_conflict_or_full_health" }, 409);
+          }
+          return json({ restored, currentHp: maximum, maxHp: maximum, resourcesSpent: 1, replayed: false });
+        } catch { return json({ error: "world_rest_failed" }, 500); }
+      }
       if (request.method === "POST" && action === "state") {
         return json({ error: "client_zone_state_writes_disabled" }, 403);
         const body = await request.json().catch(() => null) as { expectedRevision?: unknown; state?: unknown } | null;
