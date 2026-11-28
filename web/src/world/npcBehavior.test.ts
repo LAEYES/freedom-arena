@@ -17,6 +17,7 @@ describe('local NPC tactical behavior', () => {
 
   it('interpolates a chase step without teleporting', () => {
     let agent = createNpcBehaviorAgent('npc-b', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 210);
     const pose = getNpcBehaviorPose(agent);
     expect(pose.x).toBeGreaterThan(10);
@@ -44,6 +45,7 @@ describe('local NPC tactical behavior', () => {
 
   it('returns home when the player exceeds the disengagement leash', () => {
     let agent = createNpcBehaviorAgent('npc-e', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100);
     expect(agent.state).toBe('CHASE');
     agent = updateNpcBehavior(map, agent, { i: 25, j: 25 }, 16);
