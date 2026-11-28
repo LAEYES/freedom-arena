@@ -266,6 +266,7 @@ export type ChunkStreamFrame = {
   chunks: WorldChunk[];
   loadedThisFrame: number;
   pending: number;
+  requested: number;
 };
 
 /**
@@ -361,7 +362,7 @@ export class ChunkStreamScheduler {
       if (chunk) chunks.push(chunk);
     }
     chunks.sort((a, b) => a.chunkY - b.chunkY || a.chunkX - b.chunkX);
-    return { chunks, loadedThisFrame, pending: this.queue.length };
+    return { chunks, loadedThisFrame, pending: this.queue.length, requested: this.desiredKeys.size };
   }
 
   getOpacity(key: string): number {
