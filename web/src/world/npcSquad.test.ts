@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { electNpcSquadLeader, formationAnchor, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
+import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
+import { generateTerrainMap } from './terrain';
 
 describe('NPC squad coordination primitives', () => {
   it('elects the same leader regardless of input order', () => {
@@ -79,5 +80,30 @@ describe('persistent squad pursuit and regrouping', () => {
       stepElapsedMs: 0,
     });
     expect(regrouped.facing).toEqual(agent.facing);
+  });
+});
+
+describe('local multi-squad partitioning', () => {
+  const map = generateTerrainMap({ width: 32, height: 32, seed: 77, spawnI: 16, spawnJ: 16, spawnSafeRadius: 15 });
+
+  it('builds deterministic proximity groups and excludes IDLE agents', () => {
+    const actors = [
+      { id: 'b', position: { i: 13, j: 10 }, state: 'ALERT' as const },
+      { id: 'a', position: { i: 10, j: 10 }, state: 'CHASE' as const },
+      { id: 'idle', position: { i: 11, j: 10 }, state: 'IDLE' as const },
+      { id: 'z', position: { i: 27, j: 27 }, state: 'RETURN' as const },
+    ];
+    const groups = partitionNpcSquads(map, actors, 5);
+    expect(groups.map(group => group.map(actor => actor.id))).toEqual([['a', 'b'], ['z']]);
+    expect(partitionNpcSquads(map, [...actors].reverse(), 5)).toEqual(groups);
+  });
+
+  it('uses connected components so a chain of nearby actors remains one squad', () => {
+    const actors = [
+      { id: 'a', position: { i: 5, j: 5 }, state: 'ALERT' as const },
+      { id: 'b', position: { i: 10, j: 5 }, state: 'ALERT' as const },
+      { id: 'c', position: { i: 15, j: 5 }, state: 'ALERT' as const },
+    ];
+    expect(partitionNpcSquads(map, actors, 5)).toHaveLength(1);
   });
 });
