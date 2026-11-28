@@ -4,6 +4,7 @@ import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
 import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
+import { getNpcRenderDistance, shouldRenderNpc } from './renderBudget';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -408,6 +409,7 @@ export function World3DCanvas({
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
     let npcBuffer: WebGLBuffer | null = null;
+    let npcVertexStaging = new Float32Array(0);
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
@@ -958,11 +960,20 @@ export function World3DCanvas({
           if (!tile?.walkable) continue;
           const activityAmount = actor.activity === 'patrol' ? 0.72 : actor.activity === 'defend' ? 0.42 : 0.24;
           const phase = time * (actor.activity === 'patrol' ? 0.0048 : 0.0022) + npcAnimationPhase(actor.id);
+          // Rendering culling only: behavior, perception and movement above still run for every NPC.
+          const renderDistance = getNpcRenderDistance(adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
+          if (!shouldRenderNpc({ x: pose.x, y: pose.y }, playerTile, renderDistance)) continue;
           const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount, x: pose.x, y: pose.y, groundZ });
           for (const value of mesh) npcOutput.push(value);
         }
         gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(npcOutput), gl.DYNAMIC_DRAW);
+        if (npcOutput.length > npcVertexStaging.length) {
+          const capacity = Math.max(npcOutput.length, Math.ceil(Math.max(256, npcVertexStaging.length) * 1.5));
+          npcVertexStaging = new Float32Array(capacity);
+          gl.bufferData(gl.ARRAY_BUFFER, capacity * Float32Array.BYTES_PER_ELEMENT, gl.DYNAMIC_DRAW);
+        }
+        npcVertexStaging.set(npcOutput);
+        if (npcOutput.length) gl.bufferSubData(gl.ARRAY_BUFFER, 0, npcVertexStaging.subarray(0, npcOutput.length));
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, npcOutput.length / 6);
 
