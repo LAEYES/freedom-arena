@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
-import { selectWorldLod } from './worldLod';
 import { AdaptiveWorldLod } from './adaptiveWorldLod';
 import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { getNpcRenderDistance, shouldRenderNpc } from './renderBudget';
