@@ -48,6 +48,42 @@ const normalize = (p: PlayerPayload) => ({
   cards: JSON.stringify(Array.isArray(p.cards) ? p.cards : []),
 });
 
+
+
+type WorldPosition = { x: number; y: number };
+type WorldPresenceRow = {
+  player_id: string; zone_id: string; tile_x: number; tile_y: number;
+  revision: number; updated_at: string;
+};
+
+const isWorldPosition = (value: unknown): value is WorldPosition => {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as Partial<WorldPosition>;
+  return Number.isInteger(point.x) && Number.isInteger(point.y)
+    && (point.x as number) >= 0 && (point.x as number) < 64
+    && (point.y as number) >= 0 && (point.y as number) < 64;
+};
+
+const parseObject = (value: unknown): Record<string, unknown> => {
+  try {
+    const parsed = JSON.parse(String(value ?? '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const validPlayerId = (value: unknown): value is string =>
+  typeof value === 'string' && value.length >= 8 && value.length <= 128 && /^[a-zA-Z0-9:_-]+$/.test(value);
+
+const presencePayload = (row: WorldPresenceRow) => ({
+  playerId: row.player_id,
+  zoneId: row.zone_id,
+  worldTile: { x: row.tile_x, y: row.tile_y },
+  revision: row.revision,
+  updatedAt: row.updated_at,
+});
+
 const parseJson = <T>(value: unknown, fallback: T): T => {
   try {
     return JSON.parse(String(value ?? "")) as T;
@@ -85,7 +121,140 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "freedom-arena-api" });
+      return json({ ok: true, service: "freedom-arena-api", worldSync: "v1" });
+    }
+
+    const worldRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/(snapshot|join|move|heartbeat|state)$/);
+    if (worldRoute) {
+      const zoneId = worldRoute[1];
+      const action = worldRoute[2];
+
+      if (request.method === "GET" && action === "snapshot") {
+        try {
+          const [zoneState, presence, events] = await Promise.all([
+            env.DB.prepare("SELECT revision,state_json,updated_at FROM world_zone_state WHERE zone_id = ?").bind(zoneId).first<Record<string, unknown>>(),
+            env.DB.prepare("SELECT player_id,zone_id,tile_x,tile_y,revision,updated_at FROM world_player_presence WHERE zone_id = ? AND updated_at >= datetime('now','-90 seconds') ORDER BY updated_at DESC LIMIT 100").bind(zoneId).all<WorldPresenceRow>(),
+            env.DB.prepare("SELECT event_id,player_id,event_type,payload_json,created_at FROM world_event_log WHERE zone_id = ? ORDER BY created_at DESC LIMIT 50").bind(zoneId).all<Record<string, unknown>>(),
+          ]);
+          return json({
+            zoneId,
+            state: zoneState ? { revision: zoneState.revision, value: parseObject(zoneState.state_json), updatedAt: zoneState.updated_at } : { revision: 0, value: {}, updatedAt: null },
+            players: presence.results.map(presencePayload),
+            events: events.results.map(event => ({
+              id: event.event_id, playerId: event.player_id, type: event.event_type,
+              payload: parseObject(event.payload_json), createdAt: event.created_at,
+            })),
+          });
+        } catch {
+          return json({ error: "world_snapshot_failed" }, 500);
+        }
+      }
+
+      if (request.method === "POST" && action === "join") {
+        const body = await request.json().catch(() => null) as { playerId?: unknown; worldTile?: unknown } | null;
+        if (!validPlayerId(body?.playerId) || !isWorldPosition(body?.worldTile)) {
+          return json({ error: "invalid_world_join" }, 400);
+        }
+        try {
+          const row = await env.DB.prepare(`INSERT INTO world_player_presence
+            (player_id,zone_id,tile_x,tile_y,revision,updated_at)
+            VALUES(?,?,?,?,0,CURRENT_TIMESTAMP)
+            ON CONFLICT(player_id) DO UPDATE SET
+              zone_id=excluded.zone_id,tile_x=excluded.tile_x,tile_y=excluded.tile_y,
+              revision=world_player_presence.revision+1,updated_at=CURRENT_TIMESTAMP
+            RETURNING player_id,zone_id,tile_x,tile_y,revision,updated_at`)
+            .bind(body.playerId, zoneId, body.worldTile.x, body.worldTile.y)
+            .first<WorldPresenceRow>();
+          return json({ presence: row ? presencePayload(row) : null });
+        } catch {
+          return json({ error: "world_join_failed" }, 500);
+        }
+      }
+
+      if (request.method === "POST" && action === "move") {
+        const body = await request.json().catch(() => null) as {
+          playerId?: unknown; from?: unknown; to?: unknown; expectedRevision?: unknown;
+        } | null;
+        if (!validPlayerId(body?.playerId) || !isWorldPosition(body?.from) || !isWorldPosition(body?.to)
+          || !Number.isInteger(body?.expectedRevision) || (body?.expectedRevision as number) < 0) {
+          return json({ error: "invalid_world_move" }, 400);
+        }
+        const distance = Math.abs(body.to.x - body.from.x) + Math.abs(body.to.y - body.from.y);
+        if (distance !== 1) return json({ error: "movement_must_be_cardinal_adjacent" }, 422);
+        const expectedRevision = body.expectedRevision as number;
+        const eventId = body.playerId + ':' + (expectedRevision + 1);
+        try {
+          const results = await env.DB.batch([
+            env.DB.prepare(`UPDATE world_player_presence SET
+              tile_x=?,tile_y=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP
+              WHERE player_id=? AND zone_id=? AND tile_x=? AND tile_y=? AND revision=?`)
+              .bind(body.to.x, body.to.y, body.playerId, zoneId, body.from.x, body.from.y, expectedRevision),
+            env.DB.prepare(`INSERT OR IGNORE INTO world_event_log
+              (event_id,zone_id,player_id,event_type,payload_json,created_at)
+              SELECT ?,?,?, 'player_moved',?,CURRENT_TIMESTAMP
+              WHERE EXISTS (SELECT 1 FROM world_player_presence
+                WHERE player_id=? AND zone_id=? AND tile_x=? AND tile_y=? AND revision=?)`)
+              .bind(eventId, zoneId, body.playerId, JSON.stringify({ from: body.from, to: body.to, revision: expectedRevision + 1 }),
+                body.playerId, zoneId, body.to.x, body.to.y, expectedRevision + 1),
+          ]);
+          const changes = Number(results[0]?.meta?.changes ?? 0);
+          if (changes !== 1) {
+            const current = await env.DB.prepare("SELECT player_id,zone_id,tile_x,tile_y,revision,updated_at FROM world_player_presence WHERE player_id = ?")
+              .bind(body.playerId).first<WorldPresenceRow>();
+            return json({ error: "movement_conflict", current: current ? presencePayload(current) : null }, 409);
+          }
+          const current = await env.DB.prepare("SELECT player_id,zone_id,tile_x,tile_y,revision,updated_at FROM world_player_presence WHERE player_id = ?")
+            .bind(body.playerId).first<WorldPresenceRow>();
+          return json({ presence: current ? presencePayload(current) : null });
+        } catch {
+          return json({ error: "world_move_failed" }, 500);
+        }
+      }
+
+      if (request.method === "POST" && action === "heartbeat") {
+        const body = await request.json().catch(() => null) as { playerId?: unknown } | null;
+        if (!validPlayerId(body?.playerId)) return json({ error: "invalid_player_id" }, 400);
+        try {
+          const row = await env.DB.prepare(`UPDATE world_player_presence SET updated_at=CURRENT_TIMESTAMP
+            WHERE player_id=? AND zone_id=?
+            RETURNING player_id,zone_id,tile_x,tile_y,revision,updated_at`)
+            .bind(body.playerId, zoneId).first<WorldPresenceRow>();
+          return row ? json({ presence: presencePayload(row) }) : json({ error: "presence_not_found" }, 404);
+        } catch {
+          return json({ error: "world_heartbeat_failed" }, 500);
+        }
+      }
+
+      if (request.method === "POST" && action === "state") {
+        const body = await request.json().catch(() => null) as { expectedRevision?: unknown; state?: unknown } | null;
+        if (!Number.isInteger(body?.expectedRevision) || (body?.expectedRevision as number) < 0
+          || !body.state || typeof body.state !== 'object' || Array.isArray(body.state)) {
+          return json({ error: "invalid_world_state" }, 400);
+        }
+        const stateJson = JSON.stringify(body.state);
+        if (stateJson.length > 32768) return json({ error: "world_state_too_large" }, 413);
+        const expectedRevision = body.expectedRevision as number;
+        try {
+          const result = await env.DB.prepare(`INSERT INTO world_zone_state(zone_id,revision,state_json,updated_at)
+            SELECT ?,1,?,CURRENT_TIMESTAMP WHERE ?=0
+            ON CONFLICT(zone_id) DO UPDATE SET
+              revision=world_zone_state.revision+1,state_json=excluded.state_json,updated_at=CURRENT_TIMESTAMP
+            WHERE world_zone_state.revision=?`)
+            .bind(zoneId, stateJson, expectedRevision, expectedRevision).run();
+          if (Number(result.meta.changes ?? 0) !== 1) {
+            const current = await env.DB.prepare("SELECT revision,state_json,updated_at FROM world_zone_state WHERE zone_id=?")
+              .bind(zoneId).first<Record<string, unknown>>();
+            return json({ error: "world_state_conflict", current: current ? {
+              revision: current.revision, value: parseObject(current.state_json), updatedAt: current.updated_at,
+            } : { revision: 0, value: {}, updatedAt: null } }, 409);
+          }
+          return json({ revision: expectedRevision + 1, value: body.state });
+        } catch {
+          return json({ error: "world_state_write_failed" }, 500);
+        }
+      }
+
+      return json({ error: "method_not_allowed" }, 405);
     }
 
     if (url.pathname === "/player" && request.method === "GET") {
