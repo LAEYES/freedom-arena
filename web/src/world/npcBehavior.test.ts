@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createNpcBehaviorAgent, updateNpcBehavior } from './npcBehavior';
+import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior } from './npcBehavior';
+import { tileKey } from './navigation';
 import { generateTerrainMap } from './terrain';
 
 const map = generateTerrainMap({ width: 32, height: 32, seed: 77, spawnI: 16, spawnJ: 16, spawnSafeRadius: 15 });
@@ -11,15 +12,17 @@ describe('local NPC tactical behavior', () => {
     expect(agent.state).toBe('ALERT');
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
     expect(agent.state).toBe('CHASE');
-    expect(agent.path.length).toBeGreaterThan(0);
+    expect(agent.path.length).toBeGreaterThan(1);
   });
 
-  it('returns when the player exceeds disengagement or chase leash', () => {
+  it('interpolates a chase step without teleporting', () => {
     let agent = createNpcBehaviorAgent('npc-b', { i: 10, j: 10 });
-    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
-    expect(agent.state).toBe('ALERT');
-    agent = updateNpcBehavior(map, agent, { i: 25, j: 25 }, 16);
-    expect(['PATROL', 'RETURN']).toContain(agent.state);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 210);
+    const pose = getNpcBehaviorPose(agent);
+    expect(pose.x).toBeGreaterThan(10);
+    expect(pose.x).toBeLessThan(11);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 210);
+    expect(agent.position).toEqual(expect.objectContaining({ i: 11, j: 10 }));
   });
 
   it('replans deterministically when the player target changes', () => {
@@ -31,16 +34,32 @@ describe('local NPC tactical behavior', () => {
     expect(second.targetKey).toBe('13:11');
   });
 
-  it('never advances onto a blocked tile and bounds frame delta', () => {
-    const agent = createNpcBehaviorAgent('npc-d', { i: 10, j: 10 });
+  it('avoids dynamically occupied tiles and replans around a blocked next step', () => {
+    let agent = createNpcBehaviorAgent('npc-d', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 0);
+    const occupied = new Set([tileKey(11, 10)]);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100, { blockedTiles: occupied });
+    expect(agent.path.slice(1).some(tile => occupied.has(tileKey(tile.i, tile.j)))).toBe(false);
+  });
+
+  it('returns home when the player exceeds the disengagement leash', () => {
+    let agent = createNpcBehaviorAgent('npc-e', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100);
+    expect(agent.state).toBe('CHASE');
+    agent = updateNpcBehavior(map, agent, { i: 25, j: 25 }, 16);
+    expect(agent.state).toBe('RETURN');
+  });
+
+  it('never advances onto blocked terrain and bounds frame delta', () => {
+    const agent = createNpcBehaviorAgent('npc-f', { i: 10, j: 10 });
     const result = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100000);
     const tile = map.tiles.find(candidate => candidate.i === result.position.i && candidate.j === result.position.j);
     expect(tile?.walkable).toBe(true);
     expect(result.stateElapsedMs).toBeLessThanOrEqual(100);
   });
 
-  it('recovers IDLE to PATROL and keeps state transitions deterministic', () => {
-    const agent = { ...createNpcBehaviorAgent('npc-e', { i: 10, j: 10 }), state: 'IDLE' as const };
+  it('recovers IDLE to PATROL deterministically', () => {
+    const agent = { ...createNpcBehaviorAgent('npc-g', { i: 10, j: 10 }), state: 'IDLE' as const };
     expect(updateNpcBehavior(map, agent, { i: 30, j: 30 }, 16).state).toBe('PATROL');
   });
 });
