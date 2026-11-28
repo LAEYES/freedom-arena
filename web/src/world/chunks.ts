@@ -1,5 +1,7 @@
 import type { TileCoordinate } from './coordinates';
 import type { TerrainMap, TerrainTile } from './terrain';
+import type { IsometricCamera } from './isometricCamera';
+import { projectWorldToScreen } from './isometricCamera';
 
 export type ChunkCoordinate = { chunkX: number; chunkY: number };
 
@@ -211,4 +213,45 @@ export class ChunkManager {
       this.cache.delete(candidateKey);
     }
   }
+}
+
+
+/** Conservative screen-space frustum test for a terrain chunk's 3D bounds. */
+export function isChunkVisibleInCamera(
+  chunk: WorldChunk,
+  camera: IsometricCamera,
+  marginPixels = 48,
+): boolean {
+  if (!Number.isFinite(marginPixels) || marginPixels < 0) {
+    throw new RangeError('marginPixels must be finite and non-negative');
+  }
+  if (chunk.tiles.length === 0) return false;
+  let minElevation = Infinity;
+  let maxElevation = -Infinity;
+  for (const tile of chunk.tiles) {
+    minElevation = Math.min(minElevation, tile.elevation);
+    maxElevation = Math.max(maxElevation, tile.elevation);
+  }
+  const minZ = minElevation * 0.12 - 0.15;
+  const maxZ = maxElevation * 0.12 + 3.5;
+  const xs = [chunk.originI, chunk.originI + chunk.width];
+  const ys = [chunk.originJ, chunk.originJ + chunk.height];
+  const projected = [];
+  for (const x of xs) {
+    for (const y of ys) {
+      for (const z of [minZ, maxZ]) {
+        const point = projectWorldToScreen({ x, y, z }, camera);
+        if (Number.isFinite(point.x) && Number.isFinite(point.y)) projected.push(point);
+      }
+    }
+  }
+  if (projected.length === 0) return false;
+  const left = Math.min(...projected.map(point => point.x));
+  const right = Math.max(...projected.map(point => point.x));
+  const top = Math.min(...projected.map(point => point.y));
+  const bottom = Math.max(...projected.map(point => point.y));
+  return right >= -marginPixels
+    && left <= camera.config.viewportWidth + marginPixels
+    && bottom >= -marginPixels
+    && top <= camera.config.viewportHeight + marginPixels;
 }
