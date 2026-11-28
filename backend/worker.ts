@@ -175,8 +175,8 @@ export default {
         const body = await request.json().catch(() => null) as {
           playerId?: unknown; from?: unknown; to?: unknown; expectedRevision?: unknown;
         } | null;
-        if (!validPlayerId(body?.playerId) || !isWorldPosition(body?.from) || !isWorldPosition(body?.to)
-          || !Number.isInteger(body?.expectedRevision) || (body?.expectedRevision as number) < 0) {
+        if (!body || !validPlayerId(body.playerId) || !isWorldPosition(body.from) || !isWorldPosition(body.to)
+          || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0) {
           return json({ error: "invalid_world_move" }, 400);
         }
         const distance = Math.abs(body.to.x - body.from.x) + Math.abs(body.to.y - body.from.y);
@@ -227,7 +227,7 @@ export default {
 
       if (request.method === "POST" && action === "state") {
         const body = await request.json().catch(() => null) as { expectedRevision?: unknown; state?: unknown } | null;
-        if (!Number.isInteger(body?.expectedRevision) || (body?.expectedRevision as number) < 0
+        if (!body || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0
           || !body.state || typeof body.state !== 'object' || Array.isArray(body.state)) {
           return json({ error: "invalid_world_state" }, 400);
         }
