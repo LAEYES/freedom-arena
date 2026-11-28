@@ -3,6 +3,11 @@ import { createIsometricCamera, projectWorldToScreen } from './isometricCamera';
 import {
   buildAvatarMesh,
   buildTerrainMesh,
+  buildNpcMesh,
+  buildPoiBuildingMesh,
+  buildEventBeaconMesh,
+  buildBossMesh,
+  buildWeatherParticleMesh,
   pickNearestTerrainTile,
   TERRAIN_PALETTE,
   terrainWorldHeight,
@@ -47,6 +52,33 @@ describe('WebGL world mesh and picking', () => {
 
   it('converts tile elevation into world-space height', () => {
     expect(terrainWorldHeight(grass)).toBeCloseTo(0.24, 10);
+  });
+
+
+  it('builds faction-coded NPCs and POI structures', () => {
+    const npc = buildNpcMesh({ id: 'outpost:npc:0', x: 8, y: 10, faction: 'Aegis', role: 'guard' }, grass);
+    const poi = buildPoiBuildingMesh(grass, 0);
+    expect(npc.length).toBe(6 * 36 * 6);
+    expect(poi.length).toBe(5 * 36 * 6);
+    expect(npc.every(Number.isFinite)).toBe(true);
+    expect(poi.every(Number.isFinite)).toBe(true);
+  });
+
+  it('builds event beacons and boss silhouettes', () => {
+    const event = buildEventBeaconMesh(grass, 5);
+    const boss = buildBossMesh(grass);
+    expect(event.length).toBe(3 * 36 * 6);
+    expect(boss.length).toBe(7 * 36 * 6);
+    expect(event.every(Number.isFinite)).toBe(true);
+    expect(boss.every(Number.isFinite)).toBe(true);
+  });
+
+  it('generates deterministic weather particle geometry', () => {
+    const first = buildWeatherParticleMesh(1234, 'storm', 12);
+    const second = buildWeatherParticleMesh(1234, 'storm', 12);
+    expect(first.length).toBe(12 * 36 * 6);
+    expect(Array.from(first)).toEqual(Array.from(second));
+    expect(first.every(Number.isFinite)).toBe(true);
   });
 
   it('picks the nearest projected terrain tile', () => {
