@@ -23,7 +23,7 @@ describe('bridge link detection', () => {
       const links = detectBridgeLinks(crossing(axis));
       expect(links).toHaveLength(1);
       expect(links[0].axis).toBe(axis);
-      expect(getBridgeTileKeys(links)).toEqual(new Set(['0:1'].has('0:1') && axis === 'north-south' ? ['0:1'] : ['1:0']));
+      expect([...getBridgeTileKeys(links)]).toEqual([axis === 'north-south' ? '0:1' : '1:0']);
     }
   });
 
