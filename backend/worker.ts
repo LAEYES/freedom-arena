@@ -299,7 +299,7 @@ export default {
           const changed=await env.DB.prepare("UPDATE pvp_matches SET status='completed',winner_id=?,updated_at=CURRENT_TIMESTAMP,settled_at=CURRENT_TIMESTAMP WHERE match_id=? AND status IN ('ready','active')").bind(winner,matchId).run();
           if (Number(changed.meta.changes??0)!==1) return json({error:"match_already_settled"},409);
           await applyPvpRatingSettlement(env.DB,matchId);
-          return json({matchId,status:"completed",winnerId:winner,forfeit:true,ratings:{a:elo.ratingA,b:elo.ratingB}});
+          return json({matchId,status:"completed",winnerId:winner,forfeit:true});
         }
         if (match.status!=="ready" && match.status!=="active") return json({error:"match_not_active"},409);
         const body=await request.json().catch(()=>null) as {commandId?:unknown;action?:unknown}|null;
@@ -653,33 +653,6 @@ export default {
       }
       if (request.method === "POST" && action === "state") {
         return json({ error: "client_zone_state_writes_disabled" }, 403);
-        const body = await request.json().catch(() => null) as { expectedRevision?: unknown; state?: unknown } | null;
-        if (!body || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0
-          || !body.state || typeof body.state !== 'object' || Array.isArray(body.state)) {
-          return json({ error: "invalid_world_state" }, 400);
-        }
-        const stateJson = JSON.stringify(body.state);
-        if (stateJson.length > 32768) return json({ error: "world_state_too_large" }, 413);
-        const expectedRevision = body.expectedRevision as number;
-        try {
-          const result = await env.DB.prepare(`INSERT INTO world_zone_state(zone_id,revision,state_json,updated_at)
-            SELECT ?,1,?,CURRENT_TIMESTAMP
-            WHERE ?=0 OR EXISTS(SELECT 1 FROM world_zone_state WHERE zone_id=?)
-            ON CONFLICT(zone_id) DO UPDATE SET
-              revision=world_zone_state.revision+1,state_json=excluded.state_json,updated_at=CURRENT_TIMESTAMP
-            WHERE world_zone_state.revision=?`)
-            .bind(zoneId, stateJson, expectedRevision, zoneId, expectedRevision).run();
-          if (Number(result.meta.changes ?? 0) !== 1) {
-            const current = await env.DB.prepare("SELECT revision,state_json,updated_at FROM world_zone_state WHERE zone_id=?")
-              .bind(zoneId).first<Record<string, unknown>>();
-            return json({ error: "world_state_conflict", current: current ? {
-              revision: current.revision, value: parseObject(current.state_json), updatedAt: current.updated_at,
-            } : { revision: 0, value: {}, updatedAt: null } }, 409);
-          }
-          return json({ revision: expectedRevision + 1, value: body.state });
-        } catch {
-          return json({ error: "world_state_write_failed" }, 500);
-        }
       }
 
       return json({ error: "method_not_allowed" }, 405);
@@ -699,36 +672,6 @@ export default {
 
     if (url.pathname === "/player" && request.method === "POST") {
       return json({ error: "client_player_state_writes_disabled" }, 403);
-      const body = await request.json().catch(() => null) as { id?: string; player?: PlayerPayload } | null;
-      const id = body?.id?.trim();
-      if (!id || !body?.player) return json({ error: "invalid payload" }, 400);
-
-      const p = normalize(body.player);
-      try {
-        await env.DB.prepare(`INSERT INTO players (
-          id,name,level,xp,faction,victories,zone_id,exploration_count,last_discovery,
-          arena_wins,equipped_card_id,fusion_materials,world_threat,world_resources,
-          world_tile,visited_poi_ids,faction_states,npc_memories,quests,cards,updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-        ON CONFLICT(id) DO UPDATE SET
-          name=excluded.name,level=excluded.level,xp=excluded.xp,faction=excluded.faction,
-          victories=excluded.victories,zone_id=excluded.zone_id,exploration_count=excluded.exploration_count,
-          last_discovery=excluded.last_discovery,arena_wins=excluded.arena_wins,
-          equipped_card_id=excluded.equipped_card_id,fusion_materials=excluded.fusion_materials,
-          world_threat=excluded.world_threat,world_resources=excluded.world_resources,
-          world_tile=excluded.world_tile,visited_poi_ids=excluded.visited_poi_ids,
-          faction_states=excluded.faction_states,npc_memories=excluded.npc_memories,
-          quests=excluded.quests,cards=excluded.cards,updated_at=CURRENT_TIMESTAMP`).bind(
-          id,p.name,p.level,p.xp,p.faction,p.victories,p.zone_id,p.exploration_count,
-          p.last_discovery,p.arena_wins,p.equipped_card_id,p.fusion_materials,p.world_threat,
-          p.world_resources,p.world_tile,p.visited_poi_ids,p.faction_states,p.npc_memories,p.quests,p.cards
-        ).run();
-
-        const row = await env.DB.prepare("SELECT * FROM players WHERE id = ?").bind(id).first();
-        return json({ player: row ? fromRow(row as Record<string, unknown>) : null });
-      } catch {
-        return json({ error: "database_write_failed" }, 500);
-      }
     }
 
     return json({ error: "not_found" }, 404);
