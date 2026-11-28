@@ -1,6 +1,6 @@
 import type { TileCoordinate } from './coordinates';
 import { getTerrainTile, type TerrainMap } from './terrain';
-import { tileKey } from './navigation';
+import { findTerrainPath, tileKey } from './navigation';
 import { hasTerrainLineOfSight } from './npcPerception';
 
 export type NpcCoverCandidate = {
@@ -83,4 +83,26 @@ export function findNpcDirectionalCoverPositions(
       || a.position.j - b.position.j
       || a.position.i - b.position.i,
     );
+}
+
+export type NpcCoverRoute = NpcDirectionalCoverCandidate & { path: TileCoordinate[] };
+
+/** Selects the highest-ranked reachable directional cover and returns its A* route. */
+export function planNpcDirectionalCoverRoute(
+  map: TerrainMap,
+  origin: TileCoordinate,
+  threat: TileCoordinate,
+  radius = 8,
+  occupied: ReadonlySet<string> = new Set(),
+): NpcCoverRoute | null {
+  const candidates = findNpcDirectionalCoverPositions(map, origin, threat, radius, occupied);
+  for (const candidate of candidates) {
+    const path = findTerrainPath(map, origin, candidate.position, {
+      allowDiagonal: false,
+      blockedTiles: occupied,
+      maxExpandedNodes: 2048,
+    });
+    if (path.length > 1) return { ...candidate, path };
+  }
+  return null;
 }
