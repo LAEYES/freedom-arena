@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, ChunkStreamScheduler, isChunkVisibleInCamera } from './chunks';
 import { AdaptiveRenderScale, FrameTimeMonitor } from './worldPerformance';
+import { sampleActorAnimation, selectActorAnimationLod } from './actorAnimation';
 import { resolveWorldLighting } from './worldLighting';
 import { selectWorldLod } from './worldLod';
 import { findTerrainPath, tileKey } from './navigation';
@@ -1071,8 +1072,18 @@ export function World3DCanvas({
           const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
           if (!tile?.walkable) continue;
           const activityAmount = actor.activity === 'patrol' ? 0.72 : actor.activity === 'defend' ? 0.42 : 0.24;
-          const phase = time * (actor.activity === 'patrol' ? 0.0048 : 0.0022) + npcAnimationPhase(actor.id);
-          const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount, x: pose.x, y: pose.y, groundZ });
+          const actorDistance = Math.hypot(pose.x - playerTile.i, pose.y - playerTile.j);
+          const animationLod = selectActorAnimationLod(actorDistance);
+          const behaviorState = npcBehaviorAgentsRef.current[index]?.state;
+          const action = behaviorState === 'CHASE' ? 'attack'
+            : behaviorState === 'ALERT' ? 'block'
+            : (pose.progress > 0.015 ? 'walk' : 'idle');
+          const lodAmount = animationLod === 'static' ? 0 : animationLod === 'reduced' ? activityAmount * 0.45 : activityAmount;
+          const animation = sampleActorAnimation(action, time, npcAnimationPhase(actor.id), lodAmount);
+          const mesh = buildNpcMesh(actor, tile, {
+            phase: animation.phase, amount: animation.locomotion, armSwing: animation.armSwing,
+            action, x: pose.x, y: pose.y, groundZ,
+          });
           for (const value of mesh) npcOutput.push(value);
         }
         gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
@@ -1102,12 +1113,17 @@ export function World3DCanvas({
         const groundZ = nextTile
           ? terrainWorldHeight(currentTile) + (terrainWorldHeight(nextTile) - terrainWorldHeight(currentTile)) * progress
           : terrainWorldHeight(currentTile);
+        const avatarAction = movementPose && nextPosition ? 'walk' : 'idle';
+        const avatarAnimation = sampleActorAnimation(avatarAction, time, 0, movementPose && nextPosition ? 1 : 0);
         const avatarVertices = buildAvatarMesh(currentTile, {
           x: avatarX,
           y: avatarY,
           groundZ,
-          phase: time * 0.012,
-          walkAmount: movementPose && nextPosition ? 1 : 0,
+          phase: avatarAnimation.phase,
+          walkAmount: avatarAnimation.locomotion,
+          action: avatarAction,
+          armSwing: avatarAnimation.armSwing,
+          bodyLean: avatarAnimation.bodyLean,
         });
         gl.bindBuffer(gl.ARRAY_BUFFER, avatarBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, avatarVertices, gl.DYNAMIC_DRAW);
