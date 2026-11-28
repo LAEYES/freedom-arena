@@ -1,25 +1,29 @@
 # FA-WORLD-010E — Local NPC tactical behavior
 
 ## Scope
-This increment introduces a deterministic, pure TypeScript behavior controller for local NPC perception and route selection. It is a simulation primitive, not server-authoritative AI.
+This increment adds and integrates a deterministic local NPC behavior controller into the WebGL2 renderer. It remains a client-side simulation primitive, not server-authoritative AI.
 
 ## State model
 - IDLE: initialization/recovery state; transitions to PATROL.
-- PATROL: default ambient behavior; enters ALERT inside the configured Manhattan alert radius.
-- ALERT: awareness state; enters CHASE inside the chase radius or returns to PATROL after disengagement.
-- CHASE: computes an orthogonal A* route toward the player; exits to RETURN when disengagement or leash limits are exceeded.
-- RETURN: routes toward the NPC home tile and resumes PATROL at home.
+- PATROL: existing A* patrol route remains active until a player enters the configured alert radius.
+- ALERT: NPC becomes aware of the player and pauses its patrol; it enters CHASE when the player enters the closer chase radius.
+- CHASE: computes an orthogonal A* route toward the player's current tile and replans when the target changes or the next route tile becomes occupied.
+- RETURN: routes toward the NPC's original home tile after disengagement or leash-limit breach; resumes a stationary PATROL state on arrival.
+
+## Runtime integration
+- `World3DCanvas.tsx` owns one optional behavior agent per rendered NPC.
+- NPCs without an active behavior agent continue using the 010D patrol simulation.
+- On proximity detection, the tactical agent is initialized at the NPC's current interpolated patrol tile.
+- Tactical poses are interpolated in the GPU render loop and are used for pointer selection.
+- Other NPC positions are supplied as dynamic blocked tiles to A*. The current player's tile is allowed as the chase destination.
+- The pre-existing player movement validation callback remains the authority for player movement. NPC behavior does not trigger combat or interaction callbacks.
 
 ## Safety and determinism
-- A* uses the existing terrain navigation implementation.
-- Diagonal movement is disabled.
+- A* uses the existing terrain navigation implementation; diagonal movement is disabled.
 - Frame deltas are finite-checked and clamped to 100 ms.
-- Candidate positions are accepted only when the corresponding terrain tile is walkable.
-- Replanning occurs when the target tile or behavior state changes.
-- No authoritative player/NPC state, combat, inventory, or interaction callback is modified.
-
-## Current integration boundary
-The controller and deterministic unit tests are introduced as an isolated simulation layer. The existing 010D patrol renderer remains the active visual runtime until a subsequent integration increment wires tactical poses into the GPU render loop and validates behavior in-browser.
+- NPC movement accepts only walkable, unoccupied route tiles.
+- Replanning occurs when the target tile or behavior state changes, or when the next route tile becomes dynamically blocked.
+- The controller does not mutate authoritative game state, combat, inventory, or remote player state.
 
 ## Validation targets
-Unit coverage: state transitions, target-change replanning, deterministic replay, bounded delta, and walkable-tile guard. Browser/mobile performance and visual behavior remain pending.
+Unit tests cover perception radii, state transitions, interpolated chase movement, deterministic target replanning, dynamic obstacle avoidance, return leash, bounded delta and walkability. Full CI and browser/mobile visual QA are required before production use.
