@@ -5,6 +5,7 @@ import { joinZonePresence, updateZonePresence, type ZonePresence } from './lib/r
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { GraphicsStudio } from './graphics/GraphicsStudio';
+import { createAsset, paintProceduralTile, type Biome } from './graphics/assetFactory';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
 import { createEncounter, getCombatReward, getCombatSummary, playerAttack, type CombatState } from './combat';
 import { equipCard, factions, fuseCards, getCardFusionCost, getEquippedCard, grantArenaReward, applyPoiReward, applyScenarioChoice, applyCombatOutcome, applyWorldEventState, applyNpcInteraction, explore, loadPlayer, savePlayer, upgradeCard, type Faction } from './game';
@@ -269,8 +270,10 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         for (let y=0;y<rows;y++) for (let x=0;x<cols;x++) {
           const worldX = x + cameraX, worldY = y + cameraY;
           const terrain = getTile(worldX, worldY);
-          const biome = Math.floor((worldX + worldY) / 12) % 4;
-          drawPixelTile(staticCtx, terrain.kind, biome, x * tile, y * tile, tile, worldX * 97 + worldY * 193 + biome * 17);
+          const biomeIndex = Math.floor((worldX + worldY) / 12) % 5;
+          const biome: Biome = (['temperate', 'arid', 'frozen', 'volcanic', 'coastal'] as const)[biomeIndex];
+          const asset = createAsset(terrain.kind, biome, worldX * 97 + worldY * 193 + biomeIndex * 17, 64);
+          paintProceduralTile(staticCtx, asset, x * tile, y * tile);
           if (terrain.kind !== 'ground') {
             staticCtx.strokeStyle = terrain.kind === 'wall' ? '#0b0f18' : 'rgba(7,12,20,.45)';
             staticCtx.lineWidth = 2;
