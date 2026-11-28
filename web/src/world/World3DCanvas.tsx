@@ -33,6 +33,7 @@ type World3DCanvasProps = {
   explorationCount: number;
   worldEvent: WorldEvent;
   onTileMove: (tileX: number, tileY: number) => boolean;
+  onSignalSelect: (signal: { type: 'poi' | 'npc' | 'event'; name: string; x: number; y: number }) => void;
   onSwitchTo2D: () => void;
 };
 
@@ -116,6 +117,7 @@ export function World3DCanvas({
   explorationCount,
   worldEvent,
   onTileMove,
+  onSignalSelect,
   onSwitchTo2D,
 }: World3DCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,6 +125,7 @@ export function World3DCanvas({
   const movementRef = useRef<MovementState | null>(null);
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
+  const onSignalSelectRef = useRef(onSignalSelect);
   const zoomRef = useRef(1);
   const azimuthRef = useRef(Math.PI / 4);
   const [zoom, setZoom] = useState(1);
@@ -187,6 +190,7 @@ export function World3DCanvas({
   }, [zoneId, explorationCount, environment.weather, environment.cycle]);
 
   useEffect(() => { onTileMoveRef.current = onTileMove; }, [onTileMove]);
+  useEffect(() => { onSignalSelectRef.current = onSignalSelect; }, [onSignalSelect]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { azimuthRef.current = azimuth; }, [azimuth]);
 
@@ -410,7 +414,24 @@ export function World3DCanvas({
           camera,
           17,
         );
-        if (tile?.walkable) startMovement(tile.i, tile.j);
+        if (tile) {
+          const npcs = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
+          const npc = npcs.find(actor => actor.x === tile.i && actor.y === tile.j);
+          const poiIndex = zone.pointsOfInterest.findIndex((_, index) => {
+            const point = getPoiPosition(zone, index);
+            return point.x === tile.i && point.y === tile.j;
+          });
+          const eventPoint = getWorldEventPoint(worldEvent);
+          if (npc) {
+            onSignalSelectRef.current({ type: 'npc', name: npc.name, x: npc.x, y: npc.y });
+          } else if (poiIndex >= 0) {
+            onSignalSelectRef.current({ type: 'poi', name: zone.pointsOfInterest[poiIndex], x: tile.i, y: tile.j });
+          } else if (eventPoint.x === tile.i && eventPoint.y === tile.j) {
+            onSignalSelectRef.current({ type: 'event', name: worldEvent.title, x: tile.i, y: tile.j });
+          } else if (tile.walkable) {
+            startMovement(tile.i, tile.j);
+          }
+        }
         canvas.focus();
       };
 
