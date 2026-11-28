@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
+import { selectWorldLod } from './worldLod';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -203,24 +204,6 @@ export function World3DCanvas({
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
     append(buildTerrainCliffMesh(terrainMap.tiles));
-    append(buildWorldDressingMesh(terrainMap.tiles, terrainMap.seed));
-    const roadOrigin = getTerrainTile(terrainMap, 32, 32);
-    zone.pointsOfInterest.forEach((_, index) => {
-      const position = getPoiPosition(zone, index);
-      const tile = getTerrainTile(terrainMap, position.x, position.y);
-      if (tile?.walkable) {
-        append(buildLandmarkMesh(tile, (['watchtower', 'shrine', 'ruins', 'gate'] as const)[index % 4]));
-        if (roadOrigin?.walkable) {
-          const route = findTerrainPath(
-            terrainMap,
-            { i: roadOrigin.i, j: roadOrigin.j, elevation: roadOrigin.elevation },
-            { i: tile.i, j: tile.j, elevation: tile.elevation },
-            { allowDiagonal: false, maxExpandedNodes: 8192 },
-          );
-          append(buildRoadMesh(terrainMap.tiles, route));
-        }
-      }
-    });
     const eventPosition = getWorldEventPoint(worldEvent);
     const eventTile = getTerrainTile(terrainMap, eventPosition.x, eventPosition.y);
     if (eventTile?.walkable) {
@@ -231,7 +214,65 @@ export function World3DCanvas({
       }
     }
     return new Float32Array(output);
-  }, [terrainMap, zoneId, worldEvent.id, worldEvent.intensity]);
+  }, [terrainMap, worldEvent.id, worldEvent.intensity]);
+
+  const sceneChunkMeshes = useMemo(() => {
+    const chunkTiles = new Map<string, typeof terrainMap.tiles>();
+    for (const tile of terrainMap.tiles) {
+      const key = Math.floor(tile.i / 16) + ':' + Math.floor(tile.j / 16);
+      const group = chunkTiles.get(key) ?? [];
+      group.push(tile);
+      chunkTiles.set(key, group);
+    }
+    const roadSegments = new Map<string, Array<Array<{ i: number; j: number }>>>();
+    const landmarkByChunk = new Map<string, Array<{ tile: typeof terrainMap.tiles[number]; kind: 'watchtower' | 'shrine' | 'ruins' | 'gate' }>>();
+    const roadOrigin = getTerrainTile(terrainMap, 32, 32);
+    zone.pointsOfInterest.forEach((_, index) => {
+      const position = getPoiPosition(zone, index);
+      const tile = getTerrainTile(terrainMap, position.x, position.y);
+      if (!tile?.walkable) return;
+      const key = Math.floor(tile.i / 16) + ':' + Math.floor(tile.j / 16);
+      const landmarks = landmarkByChunk.get(key) ?? [];
+      landmarks.push({ tile, kind: (['watchtower', 'shrine', 'ruins', 'gate'] as const)[index % 4] });
+      landmarkByChunk.set(key, landmarks);
+      if (!roadOrigin?.walkable) return;
+      const route = findTerrainPath(
+        terrainMap,
+        { i: roadOrigin.i, j: roadOrigin.j, elevation: roadOrigin.elevation },
+        { i: tile.i, j: tile.j, elevation: tile.elevation },
+        { allowDiagonal: false, maxExpandedNodes: 8192 },
+      );
+      if (route.length === 1) {
+        const routeKey = Math.floor(route[0].i / 16) + ':' + Math.floor(route[0].j / 16);
+        const segments = roadSegments.get(routeKey) ?? [];
+        segments.push(route);
+        roadSegments.set(routeKey, segments);
+      }
+      for (let routeIndex = 0; routeIndex < route.length - 1; routeIndex++) {
+        const segment = [route[routeIndex], route[routeIndex + 1]];
+        const routeKey = Math.floor(segment[0].i / 16) + ':' + Math.floor(segment[0].j / 16);
+        const segments = roadSegments.get(routeKey) ?? [];
+        segments.push(segment);
+        roadSegments.set(routeKey, segments);
+      }
+    });
+
+    const result = new Map<string, { high: Float32Array; medium: Float32Array; low: Float32Array }>();
+    for (const [key, tiles] of chunkTiles) {
+      const landmarks = landmarkByChunk.get(key) ?? [];
+      const roads = roadSegments.get(key) ?? [];
+      const buildLod = (lod: 'high' | 'medium' | 'low') => {
+        const output: number[] = [];
+        const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
+        append(buildWorldDressingMesh(tiles, terrainMap.seed, { lod }));
+        for (const landmark of landmarks) append(buildLandmarkMesh(landmark.tile, landmark.kind));
+        for (const route of roads) append(buildRoadMesh(terrainMap.tiles, route));
+        return new Float32Array(output);
+      };
+      result.set(key, { high: buildLod('high'), medium: buildLod('medium'), low: buildLod('low') });
+    }
+    return result;
+  }, [terrainMap, zoneId]);
   const weatherVertices = useMemo(() => {
     if (environment.weather === 'clear') return new Float32Array();
     return buildWeatherParticleMesh(zoneSeed(zoneId) + explorationCount * 7919,
@@ -259,6 +300,7 @@ export function World3DCanvas({
     let gl: WebGL2RenderingContext | null = null;
     let program: WebGLProgram | null = null;
     const terrainChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
+    const sceneChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
     let npcBuffer: WebGLBuffer | null = null;
@@ -440,6 +482,47 @@ export function World3DCanvas({
         setHud(current => current.chunks === visibleChunks.length && current.tileCount === visibleTileCount
           ? current
           : { ...current, chunks: visibleChunks.length, tileCount: visibleTileCount });
+
+        const sceneLodKeys = new Set<string>();
+        for (const chunk of visibleChunks) {
+          const reference = activeCameraMode === 'thirdPerson'
+            ? positionRef.current
+            : { i: 32, j: 32 };
+          const distance = Math.hypot(
+            chunk.originI + chunk.width / 2 - reference.i,
+            chunk.originJ + chunk.height / 2 - reference.j,
+          );
+          const lod = selectWorldLod(distance);
+          const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
+          if (!geometry || geometry.length === 0) continue;
+          const cacheKey = chunk.key + ':' + lod;
+          sceneLodKeys.add(cacheKey);
+          let cached = sceneChunkBuffers.get(cacheKey);
+          if (!cached) {
+            const buffer = gl.createBuffer();
+            if (!buffer) throw new Error('Impossible de créer le buffer GPU de décor ' + cacheKey);
+            cached = { buffer, vertexCount: geometry.length / 6 };
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, geometry, gl.STATIC_DRAW);
+          } else {
+            sceneChunkBuffers.delete(cacheKey);
+          }
+          sceneChunkBuffers.set(cacheKey, cached);
+        }
+        for (const cacheKey of sceneLodKeys) {
+          const cached = sceneChunkBuffers.get(cacheKey);
+          if (!cached) continue;
+          gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
+          bindVertexLayout();
+          gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
+        }
+        while (sceneChunkBuffers.size > 32) {
+          const oldestKey = sceneChunkBuffers.keys().next().value as string | undefined;
+          if (!oldestKey || sceneLodKeys.has(oldestKey)) break;
+          const oldest = sceneChunkBuffers.get(oldestKey);
+          if (oldest) gl.deleteBuffer(oldest.buffer);
+          sceneChunkBuffers.delete(oldestKey);
+        }
 
         gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
         bindVertexLayout();
@@ -867,6 +950,8 @@ export function World3DCanvas({
       if (gl) {
         for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
         terrainChunkBuffers.clear();
+        for (const entry of sceneChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
+        sceneChunkBuffers.clear();
         if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
         if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
         if (npcBuffer) gl.deleteBuffer(npcBuffer);
