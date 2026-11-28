@@ -273,6 +273,9 @@ export default {
 
       if (request.method === "GET" && action === "inventory") {
         try {
+          const present = await env.DB.prepare("SELECT 1 AS present FROM world_player_presence WHERE player_id=? AND zone_id=?")
+            .bind(identity.subject, zoneId).first<{ present: number }>();
+          if (!present) return json({ error: "player_not_in_zone" }, 403);
           const [items, recent] = await Promise.all([
             env.DB.prepare("SELECT item_id,quantity,updated_at FROM world_inventory WHERE player_id=? AND quantity>0 ORDER BY item_id")
               .bind(identity.subject).all<{ item_id: string; quantity: number; updated_at: string }>(),
