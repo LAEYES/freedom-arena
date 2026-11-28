@@ -20,7 +20,9 @@ const makeCamera = () => createIsometricCamera({
 describe('isometric 3D camera', () => {
   it('centres the camera target in the viewport', () => {
     const camera = makeCamera();
-    expect(projectWorldToScreen(camera.config.target, camera)).toEqual({ x: 640, y: 360 });
+    const screen = projectWorldToScreen(camera.config.target, camera);
+    expect(screen.x).toBeCloseTo(640, 10);
+    expect(screen.y).toBeCloseTo(360, 10);
   });
 
   it('projects elevated points above their ground-plane projection', () => {
