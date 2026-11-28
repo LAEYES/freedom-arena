@@ -126,7 +126,7 @@ export function updateNpcBehavior(
   let position = agent.position;
   let previousPosition = agent.previousPosition;
   let stepElapsedMs = agent.stepElapsedMs + safeDelta;
-  if (target && path.length > 1 && pathIndex < path.length - 1 && stepElapsedMs >= stepDurationMs) {
+  if ((state === 'CHASE' || state === 'RETURN') && path.length > 1 && pathIndex < path.length - 1 && stepElapsedMs >= stepDurationMs) {
     const next = path[pathIndex + 1];
     if (!isTileBlocked(map, next.i, next.j, blockedTiles)) {
       previousPosition = position;
