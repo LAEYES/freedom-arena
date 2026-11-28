@@ -163,6 +163,11 @@ export class ChunkManager {
     return loaded;
   }
 
+  setVisibleChunkKeys(keys: readonly string[]): void {
+    this.visibleKeys = new Set(keys);
+    this.evictLeastRecentlyUsed();
+  }
+
   getLoadedChunk(key: string): WorldChunk | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
@@ -254,4 +259,116 @@ export function isChunkVisibleInCamera(
     && left <= camera.config.viewportWidth + marginPixels
     && bottom >= -marginPixels
     && top <= camera.config.viewportHeight + marginPixels;
+}
+
+
+export type ChunkStreamFrame = {
+  chunks: WorldChunk[];
+  loadedThisFrame: number;
+  pending: number;
+};
+
+/**
+ * Incremental deterministic chunk loader. It prioritizes the nearest chunks,
+ * bounds per-frame CPU work, and exposes a short fog-to-world transition.
+ */
+export class ChunkStreamScheduler {
+  private readonly manager: ChunkManager;
+  private readonly map: TerrainMap;
+  private readonly chunkSize: number;
+  private readonly transitionDurationMs: number;
+  private desiredKeys = new Set<string>();
+  private queue: Array<ChunkCoordinate & { distance: number }> = [];
+  private readonly opacity = new Map<string, number>();
+
+  constructor(
+    manager: ChunkManager,
+    map: TerrainMap,
+    options: { chunkSize?: number; transitionDurationMs?: number } = {},
+  ) {
+    this.manager = manager;
+    this.map = map;
+    this.chunkSize = options.chunkSize ?? DEFAULT_CHUNK_MANAGER_OPTIONS.chunkSize;
+    this.transitionDurationMs = options.transitionDurationMs ?? 220;
+    if (!Number.isInteger(this.chunkSize) || this.chunkSize < 1) throw new RangeError('chunkSize must be a positive integer');
+    if (!Number.isFinite(this.transitionDurationMs) || this.transitionDurationMs <= 0) {
+      throw new RangeError('transitionDurationMs must be finite and positive');
+    }
+  }
+
+  requestAround(center: Pick<TileCoordinate, 'i' | 'j'>, radiusChunks = 1): void {
+    if (!Number.isInteger(center.i) || !Number.isInteger(center.j)
+      || center.i < 0 || center.j < 0 || center.i >= this.map.width || center.j >= this.map.height) {
+      throw new RangeError('center tile must be inside the terrain map');
+    }
+    if (!Number.isInteger(radiusChunks) || radiusChunks < 0) throw new RangeError('radiusChunks must be a non-negative integer');
+
+    const centerChunk = getChunkCoordinate(center, this.chunkSize);
+    const requested: Array<ChunkCoordinate & { distance: number }> = [];
+    const nextKeys = new Set<string>();
+    for (let chunkY = centerChunk.chunkY - radiusChunks; chunkY <= centerChunk.chunkY + radiusChunks; chunkY++) {
+      for (let chunkX = centerChunk.chunkX - radiusChunks; chunkX <= centerChunk.chunkX + radiusChunks; chunkX++) {
+        if (!getChunkBounds(this.map, chunkX, chunkY, this.chunkSize)) continue;
+        const key = chunkKey(chunkX, chunkY);
+        nextKeys.add(key);
+        if (!this.manager.getLoadedChunk(key)) {
+          requested.push({
+            chunkX,
+            chunkY,
+            distance: Math.abs(chunkX - centerChunk.chunkX) + Math.abs(chunkY - centerChunk.chunkY),
+          });
+        }
+      }
+    }
+
+    const unchanged = nextKeys.size === this.desiredKeys.size
+      && [...nextKeys].every(key => this.desiredKeys.has(key));
+    if (unchanged) return;
+
+    this.desiredKeys = nextKeys;
+    this.manager.setVisibleChunkKeys([...nextKeys]);
+    this.queue = requested
+      .filter(chunk => nextKeys.has(chunkKey(chunk.chunkX, chunk.chunkY)))
+      .sort((a, b) => a.distance - b.distance || a.chunkY - b.chunkY || a.chunkX - b.chunkX);
+    for (const key of this.opacity.keys()) {
+      if (!nextKeys.has(key)) this.opacity.delete(key);
+    }
+  }
+
+  tick(deltaMs: number, loadBudget = 2): ChunkStreamFrame {
+    if (!Number.isFinite(deltaMs) || deltaMs < 0) throw new RangeError('deltaMs must be finite and non-negative');
+    if (!Number.isInteger(loadBudget) || loadBudget < 0) throw new RangeError('loadBudget must be a non-negative integer');
+
+    const fadeStep = deltaMs / this.transitionDurationMs;
+    for (const [key, value] of this.opacity) {
+      if (this.desiredKeys.has(key)) this.opacity.set(key, Math.min(1, value + fadeStep));
+    }
+
+    let loadedThisFrame = 0;
+    while (this.queue.length > 0 && loadedThisFrame < loadBudget) {
+      const next = this.queue.shift()!;
+      const key = chunkKey(next.chunkX, next.chunkY);
+      if (!this.desiredKeys.has(key) || this.manager.getLoadedChunk(key)) continue;
+      const chunk = this.manager.loadChunk(next.chunkX, next.chunkY);
+      if (!chunk) continue;
+      this.opacity.set(key, 0);
+      loadedThisFrame += 1;
+    }
+
+    const chunks: WorldChunk[] = [];
+    for (const key of this.desiredKeys) {
+      const chunk = this.manager.getLoadedChunk(key);
+      if (chunk) chunks.push(chunk);
+    }
+    chunks.sort((a, b) => a.chunkY - b.chunkY || a.chunkX - b.chunkX);
+    return { chunks, loadedThisFrame, pending: this.queue.length };
+  }
+
+  getOpacity(key: string): number {
+    return this.opacity.get(key) ?? 0;
+  }
+
+  getPendingCount(): number {
+    return this.queue.length;
+  }
 }
