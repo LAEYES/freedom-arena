@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
-import { selectWorldLod } from './worldLod';
+import { AdaptiveWorldLod } from './adaptiveWorldLod';
 import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { getNpcRenderDistance, shouldRenderNpc } from './renderBudget';
 import { getShadowBudget } from './vfxBudget';
@@ -430,6 +430,7 @@ export function World3DCanvas({
     const sceneBatchBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let activeTerrainBatchKey = '';
     let activeSceneBatchKey = '';
+    const adaptiveLod = new AdaptiveWorldLod(0.12);
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
     let npcBuffer: WebGLBuffer | null = null;
@@ -649,18 +650,20 @@ export function World3DCanvas({
 
         const sceneLodKeys: string[] = [];
         const sceneGeometries: Float32Array[] = [];
+        const lodQuality = adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs);
         for (const chunk of visibleChunks) {
           const reference = activeCameraMode === 'thirdPerson' ? positionRef.current : { i: 32, j: 32 };
           const distance = Math.hypot(
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
+          const lod = adaptiveLod.update(chunk.key, distance, lodQuality);
           const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
           if (!geometry?.length) continue;
           sceneLodKeys.push(chunk.key + ':' + lod);
           sceneGeometries.push(geometry);
         }
+        adaptiveLod.retain(visibleChunks.map(chunk => chunk.key));
         const sceneBatchKey = sceneLodKeys.join('|');
         if (sceneBatchKey !== activeSceneBatchKey) {
           activeSceneBatchKey = sceneBatchKey;
@@ -703,7 +706,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
+          const lod = adaptiveLod.update(chunk.key, distance, lodQuality);
           const instances = vegetationChunkInstances.get(chunk.key)?.[lod];
           if (instances?.length) {
             vegetationParts.push(instances);
