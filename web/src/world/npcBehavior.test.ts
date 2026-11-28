@@ -35,6 +35,15 @@ describe('local NPC tactical behavior', () => {
     expect(second.targetKey).toContain('13:11>');
   });
 
+  it('reuses a stable chase route while the player remains on the same tile', () => {
+    let agent = createNpcBehaviorAgent('npc-route-cache', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
+    const route = agent.path;
+    const next = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
+    expect(next.path).toBe(route);
+  });
+
   it('stops pursuit on a walkable tile adjacent to the player', () => {
     let agent = createNpcBehaviorAgent('npc-adjacent', { i: 10, j: 10 });
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
