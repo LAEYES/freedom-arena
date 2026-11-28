@@ -59,7 +59,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   ctx.save();
   const weaponX=centerX+6*unit, weaponY=centerY-7*unit;
   ctx.translate(weaponX,weaponY);
-  const angle=options.pose==='attack'?(-.75+options.frame%4*.42):options.role==='mystic'?.18:-.12;
+  const angle = options.pose === 'attack' ? (-0.75 + (options.frame % 4) * 0.42) : options.role === 'mystic' ? 0.18 : -0.12;
   ctx.rotate(angle);
   ctx.fillStyle=options.role==='mystic'?palette.glow:'#dce6f2';
   ctx.fillRect(-unit,-2*unit,2*unit,10*unit);
