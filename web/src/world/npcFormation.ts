@@ -3,7 +3,7 @@ import type { TileCoordinate } from './coordinates';
 import { getNpcFormationSlot, type NpcTacticalRole } from './npcTactics';
 import type { TerrainMap } from './terrain';
 
-export type NpcFormationMember = { id: string; role: NpcTacticalRole };
+export type NpcFormationMember = { id: string; role: NpcTacticalRole; position?: TileCoordinate };
 export type NpcFormationPlan = {
   id: string;
   role: NpcTacticalRole;
@@ -40,11 +40,13 @@ export function planNpcFormation(
 
     let chosen: TileCoordinate | null = null;
     let path: TileCoordinate[] = [];
+    const start = member.position ?? leader;
     const routeBlocked = new Set(reservations);
     routeBlocked.delete(tileKey(leader.i, leader.j));
+    routeBlocked.delete(tileKey(start.i, start.j));
     for (const candidate of candidates) {
       if (isTileBlocked(map, candidate.i, candidate.j, reservations)) continue;
-      const route = findTerrainPath(map, leader, candidate, {
+      const route = findTerrainPath(map, start, candidate, {
         allowDiagonal: false, blockedTiles: routeBlocked, maxExpandedNodes: 2048,
       });
       if (route.length > 1) {
