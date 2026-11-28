@@ -270,7 +270,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         for (let y=0;y<rows;y++) for (let x=0;x<cols;x++) {
           const worldX = x + cameraX, worldY = y + cameraY;
           const terrain = getTile(worldX, worldY);
-          const biomeIndex = Math.floor((worldX + worldY) / 12) % 5;
+          const biomeIndex = Math.floor((worldX + worldY) / 12) % 4;
           const biome: Biome = (['temperate', 'arid', 'frozen', 'volcanic', 'coastal'] as const)[biomeIndex];
           const asset = createAsset(terrain.kind, biome, worldX * 97 + worldY * 193 + biomeIndex * 17, 64);
           paintProceduralTile(staticCtx, asset, x * tile, y * tile);
