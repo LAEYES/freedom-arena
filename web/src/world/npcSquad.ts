@@ -42,3 +42,39 @@ export function shouldRefreshNpcFormation(
 export function formationAnchor(position: { x: number; y: number }): TileCoordinate {
   return { i: Math.round(position.x), j: Math.round(position.y) };
 }
+
+/** A member that breaks off pursuit requests a squad-wide regroup instead of
+ * returning independently and losing its local squad context. */
+export function shouldRegroupNpcSquad(
+  memberId: string,
+  memberIds: readonly string[],
+  previousState: 'IDLE' | 'PATROL' | 'ALERT' | 'CHASE' | 'RETURN',
+  nextState: 'IDLE' | 'PATROL' | 'ALERT' | 'CHASE' | 'RETURN',
+): boolean {
+  return memberIds.includes(memberId) && previousState === 'CHASE' && nextState === 'RETURN';
+}
+
+/** Reset a tactical agent's route at its current tile while regrouping. */
+export function prepareNpcSquadRegroup<T extends {
+  position: TileCoordinate;
+  previousPosition: TileCoordinate;
+  state: 'IDLE' | 'PATROL' | 'ALERT' | 'CHASE' | 'RETURN';
+  path: TileCoordinate[];
+  pathIndex: number;
+  targetKey: string | null;
+  stateElapsedMs: number;
+  stepElapsedMs: number;
+}> (agent: T): T {
+  const position = { ...agent.position };
+  return {
+    ...agent,
+    position,
+    previousPosition: position,
+    state: 'ALERT',
+    path: [position],
+    pathIndex: 0,
+    targetKey: null,
+    stateElapsedMs: 0,
+    stepElapsedMs: 0,
+  };
+}
