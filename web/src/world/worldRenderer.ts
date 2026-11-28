@@ -430,22 +430,33 @@ export function buildRoadMesh(
     sand: [0.69, 0.54, 0.34],
     snow: [0.62, 0.67, 0.69],
   };
-
+  const valid = route.map(point => byKey.get(point.i + ':' + point.j) ?? null);
   for (let index = 0; index < route.length; index++) {
     const point = route[index];
-    const tile = byKey.get(point.i + ':' + point.j);
+    const tile = valid[index];
     if (!tile?.walkable) continue;
-    const previous = route[index - 1];
-    const next = route[index + 1];
-    const horizontal = (previous && previous.j === point.j) || (next && next.j === point.j);
-    const vertical = (previous && previous.i === point.i) || (next && next.i === point.i);
-    const width = 0.40;
-    const length = 0.94;
     const ground = terrainWorldHeight(tile) + 0.026;
     const color = roadColors[tile.kind] ?? [0.42, 0.34, 0.25];
     pushBox(output, { x: point.i + 0.5, y: point.j + 0.5, z: ground }, {
-      width: horizontal && !vertical ? length : width,
-      depth: vertical && !horizontal ? length : width,
+      width: 0.42, depth: 0.42, height: 0.035,
+    }, color);
+
+    const nextPoint = route[index + 1];
+    const nextTile = valid[index + 1];
+    if (!nextPoint || !nextTile?.walkable) continue;
+    const di = nextPoint.i - point.i;
+    const dj = nextPoint.j - point.j;
+    if (Math.abs(di) + Math.abs(dj) !== 1) continue;
+    if (Math.abs(tile.elevation - nextTile.elevation) > 1) continue;
+    const nextGround = terrainWorldHeight(nextTile) + 0.026;
+    const midpointZ = (ground + nextGround) / 2;
+    pushBox(output, {
+      x: point.i + 0.5 + di * 0.5,
+      y: point.j + 0.5 + dj * 0.5,
+      z: midpointZ,
+    }, {
+      width: di !== 0 ? 1.04 : 0.42,
+      depth: dj !== 0 ? 1.04 : 0.42,
       height: 0.035,
     }, color);
   }
