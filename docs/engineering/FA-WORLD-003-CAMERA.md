@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendance : FA-WORLD-002
-- Statut : prototype mathématique ajouté ; CI en attente.
+- Statut : VALIDATED — CI réussie.
 
 ## Modèle caméra
 
@@ -48,4 +48,6 @@ Tests ajoutés :
 - matrices 4×4 finies,
 - rejet des configurations invalides.
 
-La validation complète est conditionnée à GitHub Actions.
+Résultats GitHub Actions — Web build, run #145 : **success**. Les étapes `npm install --no-package-lock`, `npm run test` et `npm run build` ont toutes réussi. Le workflow Hostinger Deploy, run #80, a réussi la compilation ; l'étape `Upload dist to Hostinger` a été **skipped** car l'événement était une pull request.
+
+**FA-WORLD-003 : VALIDATED.** Le prototype caméra mathématique et ses tests sont validés. Le renderer WebGL/visuel et son intégration React restent hors périmètre de ce lot.
