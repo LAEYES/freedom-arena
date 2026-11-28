@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createIsometricCamera } from './isometricCamera';
+import { createIsometricCamera, projectWorldToScreen } from './isometricCamera';
 import {
   buildAvatarMesh,
   buildTerrainMesh,
@@ -64,19 +64,13 @@ describe('WebGL world mesh and picking', () => {
       y: 7.5,
       z: terrainWorldHeight(tiles[1]) + 0.015,
     };
-    const projected = {
-      x: screen.x + (center.x - camera.config.target.x) * 0,
-      y: screen.y,
-    };
     const actual = {
       x: camera.config.viewportWidth / 2,
       y: camera.config.viewportHeight / 2,
     };
     // The exact projection is used here rather than assuming screen axes.
-    const { projectWorldToScreen } = await import('./isometricCamera');
     const point = projectWorldToScreen(center, camera);
     expect(pickNearestTerrainTile(point, tiles, camera, 2)?.i).toBe(5);
     expect(pickNearestTerrainTile(actual, [], camera)).toBeNull();
-    expect(projected.y).toBe(screen.y);
   });
 });
