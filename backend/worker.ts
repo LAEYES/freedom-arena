@@ -201,7 +201,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const pvpRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/pvp\\/(queue|status|cancel)$/);
+    const pvpRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/pvp\\/(queue|status|cancel|rating)$/);
     if (pvpRoute) {
       const zoneId = pvpRoute[1], action = pvpRoute[2], playerId = identity.subject;
       if (request.method === "POST" && action === "queue") {
@@ -249,6 +249,12 @@ export default {
           const queued = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued' AND zone_id=?").bind(playerId,zoneId).first<{rating:number;queued_at:string}>();
           return json(queued ? {status:"queued",rating:queued.rating,queuedAt:queued.queued_at} : {status:"idle"});
         } catch { return json({error:"pvp_status_failed"},500); }
+      }
+      if (request.method === "GET" && action === "rating") {
+        try {
+          const rating = await env.DB.prepare("SELECT rating,matches_played,wins,losses,draws,updated_at FROM pvp_ratings WHERE player_id=?").bind(playerId).first<Record<string,unknown>>();
+          return json({playerId,rating:rating?.rating??1000,matchesPlayed:rating?.matches_played??0,wins:rating?.wins??0,losses:rating?.losses??0,draws:rating?.draws??0,updatedAt:rating?.updated_at??null});
+        } catch { return json({error:"pvp_rating_unavailable"},500); }
       }
       if (request.method === "POST" && action === "cancel") {
         try {
