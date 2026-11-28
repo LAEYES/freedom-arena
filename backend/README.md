@@ -126,3 +126,16 @@ npm test
 ```
 
 This remains a PvE prototype. It does not yet implement equipment slots beyond one equipped card, card-specific skill definitions, persistent health, status-effect catalogues, PvP, loot tables, inventory transactions, private-zone ACLs or edge-level DDoS protection. No migration is required for FA-WORLD-037 because the existing `players.cards` / `equipped_card_id` columns and `world_command_log.outcome_json` store the required data.
+
+
+## FA-WORLD-038 persistent health and recovery
+
+For an existing database, apply migration 005 after migrations 002–004:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/005_fa_world_038_health.sql
+```
+
+Fresh databases receive `players.current_hp` and `world_rest_log` from `schema.sql`. Combat now carries the persisted HP forward and writes remaining HP atomically with XP, victories, resources, threat and the idempotent combat result. A player at zero HP cannot initiate another combat, preventing repeated defeat rewards. Recovery uses `POST /world/:zoneId/rest` with `{ "commandId": "client-generated-unique-id-0002" }`; the server verifies zone presence, charges one world resource, restores HP to the maximum derived from the player's level and equipped card, and records the rest command so retries cannot charge twice. Rest is not available at full health.
+
+The API client must apply migration 005 before using the updated Worker. No remote migration or deployment is performed by this change.
