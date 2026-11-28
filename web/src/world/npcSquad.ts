@@ -1,4 +1,6 @@
 import type { TileCoordinate } from './coordinates';
+import { hasTerrainLineOfSight } from './npcPerception';
+import type { TerrainMap } from './terrain';
 
 export type NpcSquadCandidate = {
   id: string;
@@ -77,4 +79,44 @@ export function prepareNpcSquadRegroup<T extends {
     stateElapsedMs: 0,
     stepElapsedMs: 0,
   };
+}
+
+/**
+ * Partitions active tactical actors into deterministic local groups.
+ * Membership uses connected components of the proximity + terrain-LOS graph;
+ * it does not create persistent squad identities or server-side groups.
+ */
+export function partitionNpcSquads(
+  map: TerrainMap,
+  candidates: readonly NpcSquadCandidate[],
+  linkRadius = 6,
+): NpcSquadCandidate[][] {
+  const radius = Number.isFinite(linkRadius) ? Math.max(0, linkRadius) : 6;
+  const ordered = candidates
+    .filter(candidate => candidate.state !== 'IDLE')
+    .slice()
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const remaining = new Map(ordered.map(candidate => [candidate.id, candidate]));
+  const groups: NpcSquadCandidate[][] = [];
+
+  while (remaining.size > 0) {
+    const first = remaining.values().next().value as NpcSquadCandidate;
+    remaining.delete(first.id);
+    const group: NpcSquadCandidate[] = [first];
+    const queue = [first];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const candidate of [...remaining.values()]) {
+        const distance = Math.abs(candidate.position.i - current.position.i)
+          + Math.abs(candidate.position.j - current.position.j);
+        if (distance > radius || !hasTerrainLineOfSight(map, current.position, candidate.position)) continue;
+        remaining.delete(candidate.id);
+        group.push(candidate);
+        queue.push(candidate);
+      }
+    }
+    group.sort((a, b) => a.id.localeCompare(b.id));
+    groups.push(group);
+  }
+  return groups.sort((a, b) => a[0].id.localeCompare(b[0].id));
 }
