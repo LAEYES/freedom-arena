@@ -60,7 +60,9 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
         float rotatedX=p.x*cameraCos-p.z*cameraSin;
         float rotatedZ=p.x*cameraSin+p.z*cameraCos;
         float elevation=u_camera_mode<0.5?0.615:(u_camera_mode<1.5?0.30:0.82);
-        p=vec3(rotatedX*u_camera_zoom,p.y*cos(elevation)-rotatedZ*sin(elevation),p.y*sin(elevation)+rotatedZ*cos(elevation));
+        vec3 cameraPoint=vec3(rotatedX,p.y*cos(elevation)-rotatedZ*sin(elevation),p.y*sin(elevation)+rotatedZ*cos(elevation));
+        float perspectiveScale=u_camera_mode>0.5&&u_camera_mode<1.5?1.0/max(0.65,1.0+cameraPoint.z*0.035):1.0;
+        p=cameraPoint*perspectiveScale*u_camera_zoom;
         float walk=sin(u_time*5.0+u_player_x*0.8+u_player_y*0.6);
         p.y+=sin(u_time*1.5+p.x*0.8+p.z*0.6)*0.012;
         // Subtle procedural walk/idle motion across the tactical scene.
