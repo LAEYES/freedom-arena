@@ -152,8 +152,10 @@ export function World3DCanvas({
   const onSignalSelectRef = useRef(onSignalSelect);
   const zoomRef = useRef(1);
   const azimuthRef = useRef(Math.PI / 4);
+  const cameraModeRef = useRef<'isometric' | 'thirdPerson'>('isometric');
   const [zoom, setZoom] = useState(1);
   const [azimuth, setAzimuth] = useState(Math.PI / 4);
+  const [cameraMode, setCameraMode] = useState<'isometric' | 'thirdPerson'>('isometric');
   const [rendererError, setRendererError] = useState<string | null>(null);
   const [hud, setHud] = useState({
     x: worldTile.x,
@@ -238,6 +240,7 @@ export function World3DCanvas({
   useEffect(() => { onSignalSelectRef.current = onSignalSelect; }, [onSignalSelect]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { azimuthRef.current = azimuth; }, [azimuth]);
+  useEffect(() => { cameraModeRef.current = cameraMode; }, [cameraMode]);
 
   useEffect(() => {
     if (positionRef.current.i !== worldTile.x || positionRef.current.j !== worldTile.y) {
@@ -352,16 +355,27 @@ export function World3DCanvas({
 
         const aspect = rect.width / rect.height;
         const fitHeight = Math.max(64, 92 / aspect);
+        const activeCameraMode = cameraModeRef.current;
+        const followedTile = getTerrainTile(terrainMap, positionRef.current.i, positionRef.current.j);
+        const cameraTarget = activeCameraMode === 'thirdPerson'
+          ? {
+            x: positionRef.current.i + 0.5,
+            y: positionRef.current.j + 0.5,
+            z: terrainWorldHeight(followedTile ?? { elevation: 0 }) + 1.15,
+          }
+          : { x: 32, y: 32, z: 0.45 };
         const camera = createIsometricCamera({
-          target: { x: 32, y: 32, z: 0.45 },
+          target: cameraTarget,
           viewportWidth: rect.width,
           viewportHeight: rect.height,
           azimuthRadians: azimuthRef.current,
-          elevationRadians: ELEVATION_ANGLE,
-          distance: 100,
+          elevationRadians: activeCameraMode === 'thirdPerson' ? 0.34 : ELEVATION_ANGLE,
+          distance: activeCameraMode === 'thirdPerson' ? 10.5 * zoomRef.current : 100,
           orthographicHeight: fitHeight * zoomRef.current,
-          near: 0.1,
-          far: 500,
+          near: activeCameraMode === 'thirdPerson' ? 0.05 : 0.1,
+          far: activeCameraMode === 'thirdPerson' ? 240 : 500,
+          projectionMode: activeCameraMode === 'thirdPerson' ? 'perspective' : 'orthographic',
+          fovRadians: Math.PI / 3,
         });
         cameraRef.current = camera;
 
