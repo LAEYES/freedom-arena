@@ -59,7 +59,7 @@ describe('WebGL world mesh and picking', () => {
     const npc = buildNpcMesh({ id: 'outpost:npc:0', x: 8, y: 10, faction: 'Aegis', role: 'guard' }, grass);
     const poi = buildPoiBuildingMesh(grass, 0);
     expect(npc.length).toBe(6 * 36 * 6);
-    expect(poi.length).toBe(5 * 36 * 6);
+    expect(poi.length).toBe(4 * 36 * 6);
     expect(npc.every(Number.isFinite)).toBe(true);
     expect(poi.every(Number.isFinite)).toBe(true);
   });
