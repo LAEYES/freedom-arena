@@ -5,7 +5,7 @@ export interface CharacterEquipmentVisual {
   tier: 1 | 2 | 3;
   accent: string;
 }
-export function getCharacterEquipmentVisual(rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | string, power: number, defense: number, vitality: number): CharacterEquipmentVisual | undefined {
+export function getCharacterEquipmentVisual(rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | string): CharacterEquipmentVisual | undefined {
   if (!rarity || rarity === 'Common') return undefined;
   const tier = rarity === 'Legendary' ? 3 : rarity === 'Epic' ? 2 : 1;
   const accent = rarity === 'Legendary' ? '#f4c96b' : rarity === 'Epic' ? '#c49be7' : '#75c9dc';
