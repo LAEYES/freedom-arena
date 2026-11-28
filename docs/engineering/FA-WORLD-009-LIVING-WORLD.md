@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendance : FA-WORLD-008
-- Statut : code intégré ; qualification CI en attente.
+- Statut : code intégré ; CI validée le 2026-11-28.
 
 ## Objectif
 Enrichir le renderer WebGL2 avec des entités visibles et sélectionnables, alimentées par les données existantes du monde Freedom Arena.
@@ -57,3 +57,13 @@ Les actions métier restent exécutées par les fonctions existantes du jeu ; le
 - Mesure GPU et FPS sur matériel cible.
 
 Aucun merge vers main ni déploiement Hostinger n'est effectué par cette tâche.
+
+## Résultat CI — 2026-11-28
+
+- GitHub Actions Web build #207 : **success**.
+- Vitest : **77/77 tests réussis**, 11 fichiers de test.
+- TypeScript : **success**.
+- Vite production build : **success**.
+- Hostinger Deploy #117 : build réussi ; transfert FTP **skipped** car la branche est une pull request Draft.
+
+La CI qualifie la compilation et les tests unitaires. Elle ne remplace pas la validation visuelle navigateur/GPU sur appareils cibles.
