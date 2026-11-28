@@ -35,6 +35,8 @@ import {
   buildBossMesh,
   buildWeatherParticleMesh,
   buildWorldDressingMesh,
+  buildVegetationInstances,
+  buildVegetationInstanceTemplate,
 } from './worldRenderer';
 
 type PlayerTile = { x: number; y: number };
@@ -124,6 +126,53 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
   gl.deleteShader(fragment);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
     const message = gl.getProgramInfoLog(program) || 'Erreur de liaison du programme WebGL2.';
+    gl.deleteProgram(program);
+    throw new Error(message);
+  }
+  return program;
+}
+
+
+function createVegetationProgram(gl: WebGL2RenderingContext): WebGLProgram {
+  const vertex = createShader(gl, gl.VERTEX_SHADER, `#version 300 es
+    in vec3 aPosition;
+    in vec3 aColor;
+    in vec3 aInstanceOffset;
+    in float aInstanceScale;
+    in vec3 aInstanceTint;
+    uniform mat4 uViewProjection;
+    out vec3 vColor;
+    void main() {
+      vec3 worldPosition = aPosition * aInstanceScale + aInstanceOffset;
+      gl_Position = uViewProjection * vec4(worldPosition, 1.0);
+      vColor = aColor * aInstanceTint;
+    }
+  `);
+  const fragment = createShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
+    precision highp float;
+    in vec3 vColor;
+    uniform vec3 uFogColor;
+    uniform float uFogAmount;
+    out vec4 outColor;
+    void main() {
+      float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
+      outColor = vec4(mix(vColor, uFogColor, depthFog), 1.0);
+    }
+  `);
+  const program = gl.createProgram();
+  if (!program) throw new Error('Impossible de créer le programme de végétation instanciée.');
+  gl.attachShader(program, vertex);
+  gl.attachShader(program, fragment);
+  gl.bindAttribLocation(program, 0, 'aPosition');
+  gl.bindAttribLocation(program, 1, 'aColor');
+  gl.bindAttribLocation(program, 2, 'aInstanceOffset');
+  gl.bindAttribLocation(program, 3, 'aInstanceScale');
+  gl.bindAttribLocation(program, 4, 'aInstanceTint');
+  gl.linkProgram(program);
+  gl.deleteShader(vertex);
+  gl.deleteShader(fragment);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const message = gl.getProgramInfoLog(program) || 'Erreur de liaison du programme de végétation instanciée.';
     gl.deleteProgram(program);
     throw new Error(message);
   }
@@ -264,7 +313,7 @@ export function World3DCanvas({
       const buildLod = (lod: 'high' | 'medium' | 'low') => {
         const output: number[] = [];
         const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
-        append(buildWorldDressingMesh(tiles, terrainMap.seed, { lod }));
+        append(buildWorldDressingMesh(tiles, terrainMap.seed, { lod, includeVegetation: false }));
         for (const landmark of landmarks) append(buildLandmarkMesh(landmark.tile, landmark.kind));
         for (const route of roads) append(buildRoadMesh(terrainMap.tiles, route));
         return new Float32Array(output);
@@ -273,6 +322,25 @@ export function World3DCanvas({
     }
     return result;
   }, [terrainMap, zoneId]);
+  const vegetationChunkInstances = useMemo(() => {
+    const chunkTiles = new Map<string, typeof terrainMap.tiles>();
+    for (const tile of terrainMap.tiles) {
+      const key = Math.floor(tile.i / 16) + ':' + Math.floor(tile.j / 16);
+      const group = chunkTiles.get(key) ?? [];
+      group.push(tile);
+      chunkTiles.set(key, group);
+    }
+    const result = new Map<string, { high: Float32Array; medium: Float32Array; low: Float32Array }>();
+    for (const [key, tiles] of chunkTiles) {
+      result.set(key, {
+        high: buildVegetationInstances(tiles, terrainMap.seed, { lod: 'high' }),
+        medium: buildVegetationInstances(tiles, terrainMap.seed, { lod: 'medium' }),
+        low: buildVegetationInstances(tiles, terrainMap.seed, { lod: 'low' }),
+      });
+    }
+    return result;
+  }, [terrainMap]);
+
   const weatherVertices = useMemo(() => {
     if (environment.weather === 'clear') return new Float32Array();
     return buildWeatherParticleMesh(zoneSeed(zoneId) + explorationCount * 7919,
