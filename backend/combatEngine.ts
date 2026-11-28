@@ -45,12 +45,13 @@ export function buildPlayerCombatant(levelInput: number, card: StoredCard | null
 
 export function resolveCombatEncounter(
   playerLevel: number, worldThreat: number, cards: StoredCard[], equippedCardId: string | null,
-  rolls: number[], currentHp?: number | null, activeStatuses: PersistentStatus[] = [],
+  rolls: number[], currentHp?: number | null, activeStatuses: PersistentStatus[] = [], equipment?: EquipmentLoadout,
 ): CombatEncounter {
   const level = clamp(playerLevel, 1, 100);
   const threat = clamp(worldThreat, 1, 100);
-  const card = equippedCardId ? cards.find(c => c && c.id === equippedCardId) ?? null : null;
-  const playerBase = buildPlayerCombatant(level, card);
+  const loadout = equipment ?? (equippedCardId ? { weapon: equippedCardId } : {});
+  const card = loadout.weapon ? cards.find(c => c && c.id === loadout.weapon) ?? null : null;
+  const playerBase = equipment ? buildEquippedCombatant(level, cards, loadout) : buildPlayerCombatant(level, card);
   const enemyLevel = clamp(level + (threat >= 30 ? 2 : threat >= 12 ? 1 : 0) + (rollAt(rolls, 0) > 0.78 ? 1 : 0), 1, 100);
   const enemy: Combatant = {
     maxHp: clamp(62 + enemyLevel * 9 + threat, 60, 1800),
