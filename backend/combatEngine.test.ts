@@ -117,3 +117,13 @@ test("loot resolver ignores missing or invalid random values safely", () => {
   assert.ok(Array.isArray(drops));
   assert.ok(drops.every(drop => ["scrap_metal", "arcane_shard", "medicinal_herb"].includes(drop.itemId)));
 });
+
+
+test("enemy archetype is deterministic from server roll and included in outcome", () => {
+  const rolls = Array(40).fill(0.5);
+  const first = resolveCombatEncounter(12, 8, [], null, rolls);
+  const second = resolveCombatEncounter(12, 8, [], null, rolls);
+  assert.equal(first.enemyArchetype, "sentinel");
+  assert.equal(first.enemyArchetype, second.enemyArchetype);
+  assert.deepEqual(first.turns, second.turns);
+});
