@@ -2,6 +2,7 @@ import { StrictMode, useEffect, useRef, useState } from 'react';
 import { loadOrCreatePlayerRemote, syncPlayerRemote } from './lib/supabase';
 import { loadPlayerApi, savePlayerApi } from './lib/api';
 import { joinZonePresence, updateZonePresence, type ZonePresence } from './lib/realtime';
+import { createWorldSyncClient } from './lib/worldSync';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
@@ -317,6 +318,7 @@ function App() {
   const [remotePlayers, setRemotePlayers] = useState<ZonePresence[]>([]);
   const presenceChannelRef = useRef<import('@supabase/supabase-js').RealtimeChannel | null>(null);
   const presencePlayerIdRef = useRef<string>('');
+  const worldSyncRef = useRef<ReturnType<typeof createWorldSyncClient> | null>(null);
   const currentZone = getZone(player.zoneId);
   const environment = getZoneEnvironment(currentZone, player.worldThreat, player.worldResources, player.explorationCount);
   const zoneNpcs = getZoneNpcs(currentZone, player.worldThreat, player.worldResources, player.explorationCount);
@@ -355,6 +357,15 @@ function App() {
     const id = existing ?? crypto.randomUUID();
     if (!existing) window.localStorage.setItem('freedomarena:presence:id', id);
     presencePlayerIdRef.current = id;
+    const worldSync = createWorldSyncClient(id, current => {
+      setWorldMessage(current
+        ? 'Conflit de synchronisation serveur : position distante ' + current.worldTile.x + ', ' + current.worldTile.y
+        : 'Conflit de synchronisation serveur : présence introuvable');
+    });
+    worldSyncRef.current = worldSync;
+    void worldSync.syncPosition(player.zoneId, player.worldTile).catch(() => {
+      setWorldMessage('Synchronisation monde indisponible · mode local conservé');
+    });
     let stopped = false;
     let stopPresence: (() => Promise<void>) | null = null;
     const join = async () => {
@@ -364,8 +375,27 @@ function App() {
       stopPresence = result.stop;
     };
     void join();
-    return () => { stopped = true; setRemotePlayers([]); presenceChannelRef.current = null; if (stopPresence) void stopPresence(); };
+    return () => { stopped = true; worldSync.dispose(); if (worldSyncRef.current === worldSync) worldSyncRef.current = null; setRemotePlayers([]); presenceChannelRef.current = null; if (stopPresence) void stopPresence(); };
   }, [player.zoneId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void worldSyncRef.current?.heartbeat();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const client = worldSyncRef.current;
+    if (!client) return;
+    void client.syncPosition(player.zoneId, player.worldTile).then(result => {
+      if (!result.ok && result.conflict) {
+        setWorldMessage('Conflit de position détecté par le serveur · rechargement requis');
+      }
+    }).catch(() => {
+      setWorldMessage('Synchronisation monde indisponible · mode local conservé');
+    });
+  }, [player.zoneId, player.worldTile.x, player.worldTile.y]);
 
   useEffect(() => {
     const id = presencePlayerIdRef.current;
