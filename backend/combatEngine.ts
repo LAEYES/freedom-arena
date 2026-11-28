@@ -66,6 +66,8 @@ export function resolveCombatEncounter(
   const abilityPower = stat(ability?.potency, 12, 40);
   let playerHp = currentHp == null ? playerBase.maxHp : clamp(currentHp, 0, playerBase.maxHp);
   let enemyHp = enemy.maxHp;
+  let enemyDots: PersistentStatus[] = [];
+  let enemyWeakenedRounds = 0;
   let enemyExposed = 0, enemyGuard = 0, playerShield = 0, regeneration = 0, weakenedRounds = 0;
   let statuses = normalizeStatuses(activeStatuses);
   const turns: CombatTurn[] = [];
@@ -86,6 +88,15 @@ export function resolveCombatEncounter(
       playerHp += healed;
       turns.push({ turn: round, actor: "player", action: "skill", damage: -healed, targetHp: playerHp, effect: "regeneration" });
     }
+    for (const dot of enemyDots) {
+      if (dot.remaining > 0 && enemyHp > 0) {
+        const damage = Math.min(enemyHp, dot.potency);
+        enemyHp -= damage;
+        turns.push({ turn: round, actor: "player", action: "skill", damage, targetHp: enemyHp, effect: dot.type });
+        dot.remaining--;
+      }
+    }
+    enemyDots = enemyDots.filter(dot => dot.remaining > 0);
     const order: Array<"player" | "enemy"> = playerFirst ? ["player", "enemy"] : ["enemy", "player"];
     for (const actor of order) {
       if (playerHp <= 0 || enemyHp <= 0) break;
@@ -104,10 +115,8 @@ export function resolveCombatEncounter(
           enemyHp = Math.max(0, enemyHp - damage);
           enemyGuard = 0;
           enemyExposed = abilityEffect === "expose" && skill ? 1 : 0;
-          if (skill && (abilityEffect === "burn" || abilityEffect === "poison" || abilityEffect === "weaken")) {
-            const dot = abilityEffect === "weaken" ? 0 : abilityPower;
-            if (dot > 0 && enemyHp > 0) enemyHp = Math.max(0, enemyHp - dot);
-          }
+          if (skill && (abilityEffect === "burn" || abilityEffect === "poison")) enemyDots.push({ type: abilityEffect, remaining: 2, potency: abilityPower });
+          if (skill && abilityEffect === "weaken") enemyWeakenedRounds = 2;
           turns.push({ turn: round, actor, action: skill ? "skill" : "strike", damage, targetHp: enemyHp, effect: skill ? abilityEffect : undefined });
         }
       } else if (round % 5 === 0 && rollAt(rolls, round * 3) > 0.2) {
@@ -115,7 +124,7 @@ export function resolveCombatEncounter(
         turns.push({ turn: round, actor, action: "guard", damage: 0, targetHp: enemyHp, effect: "guard" });
       } else {
         const heavy = round % 4 === 0 && rollAt(rolls, round * 3) > 0.35;
-        const raw = enemy.attack * (heavy ? 1.45 : 1) * (weakenedRounds > 0 ? 0.7 : 1);
+        const raw = enemy.attack * (heavy ? 1.45 : 1) * (enemyWeakenedRounds > 0 ? 0.7 : 1);
         const damage = clamp(Math.max(1, Math.floor(raw - playerBase.defense * 0.6 - playerShield)), 1, 750);
         playerHp = Math.max(0, playerHp - damage);
         playerShield = 0;
@@ -127,6 +136,7 @@ export function resolveCombatEncounter(
       }
     }
     if (weakenedRounds > 0) weakenedRounds--;
+    if (enemyWeakenedRounds > 0) enemyWeakenedRounds--;
   }
   const victory = enemyHp <= 0 && playerHp > 0;
   const outcome = victory ? "victory" : playerHp <= 0 && enemyHp <= 0 ? "draw" : "defeat";
