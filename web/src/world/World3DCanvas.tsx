@@ -844,15 +844,16 @@ export function World3DCanvas({
       <canvas
         ref={canvasRef}
         className="world3d-canvas"
-        aria-label="Monde 3D isométrique Freedom Arena. Cliquez une tuile ou utilisez les flèches du clavier pour déplacer le personnage."
+        aria-label="Monde 3D hybride Freedom Arena. Cliquez une tuile ou utilisez les flèches du clavier pour déplacer le personnage."
         tabIndex={0}
       />
       <div className="world3d-toolbar" aria-label="Commandes de la caméra 3D">
         <button type="button" title="Zoom avant" onClick={() => setZoom(value => clamp(value * 0.88, 0.52, 2.2))}>＋</button>
         <button type="button" title="Zoom arrière" onClick={() => setZoom(value => clamp(value * 1.12, 0.52, 2.2))}>－</button>
         <button type="button" title="Rotation gauche" onClick={() => rotate(-Math.PI / 12)}>↶</button>
+        <button type="button" title={cameraMode === 'isometric' ? 'Passer en troisième personne' : 'Passer en caméra isométrique'} onClick={() => setCameraMode(value => value === 'isometric' ? 'thirdPerson' : 'isometric')}>{cameraMode === 'isometric' ? '3P' : 'ISO'}</button>
         <button type="button" title="Rotation droite" onClick={() => rotate(Math.PI / 12)}>↷</button>
-        <button type="button" title="Réinitialiser la caméra" onClick={() => { setZoom(1); setAzimuth(Math.PI / 4); }}>⌂</button>
+        <button type="button" title="Réinitialiser la caméra" onClick={() => { setZoom(1); setAzimuth(Math.PI / 4); setCameraMode('isometric'); }}>⌂</button>
       </div>
       <div className="world3d-hud">
         <strong>FA-WORLD · WEBGL2</strong>
