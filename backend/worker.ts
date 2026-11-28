@@ -238,11 +238,12 @@ export default {
         const expectedRevision = body.expectedRevision as number;
         try {
           const result = await env.DB.prepare(`INSERT INTO world_zone_state(zone_id,revision,state_json,updated_at)
-            SELECT ?,1,?,CURRENT_TIMESTAMP WHERE ?=0
+            SELECT ?,1,?,CURRENT_TIMESTAMP
+            WHERE ?=0 OR EXISTS(SELECT 1 FROM world_zone_state WHERE zone_id=?)
             ON CONFLICT(zone_id) DO UPDATE SET
               revision=world_zone_state.revision+1,state_json=excluded.state_json,updated_at=CURRENT_TIMESTAMP
             WHERE world_zone_state.revision=?`)
-            .bind(zoneId, stateJson, expectedRevision, expectedRevision).run();
+            .bind(zoneId, stateJson, expectedRevision, zoneId, expectedRevision).run();
           if (Number(result.meta.changes ?? 0) !== 1) {
             const current = await env.DB.prepare("SELECT revision,state_json,updated_at FROM world_zone_state WHERE zone_id=?")
               .bind(zoneId).first<Record<string, unknown>>();
