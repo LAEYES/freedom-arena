@@ -39,10 +39,10 @@ export function canPlaceBuilding(buildings: readonly BuildingDefinition[], candi
   });
 }
 export function drawBuilding(ctx: CanvasRenderingContext2D, building: BuildingDefinition, x: number, y: number, tileSize: number): void {
-  const size=getBuildingFootprint(building.kind,building.rotation), palette=BUILDING_PALETTES[building.faction];
-  const w=size.width*tileSize,h=size.height*tileSize;
+  const size=getBuildingFootprint(building.kind,building.rotation), base=BUILDING_FOOTPRINTS[building.kind], palette=BUILDING_PALETTES[building.faction];
+  const w=base.width*tileSize,h=base.height*tileSize;
   ctx.save();
-  ctx.translate(x+w/2,y+h/2);ctx.rotate(building.rotation*Math.PI/180);
+  ctx.translate(x+size.width*tileSize/2,y+size.height*tileSize/2);ctx.rotate(building.rotation*Math.PI/180);
   ctx.translate(-w/2,-h/2);
   ctx.fillStyle='rgba(0,0,0,.34)';ctx.fillRect(5,h-9,w-1,10);
   ctx.fillStyle=palette.base;ctx.fillRect(3,Math.floor(h*.35),w-6,Math.floor(h*.58));
