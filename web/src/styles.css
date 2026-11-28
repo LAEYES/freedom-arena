@@ -63,3 +63,12 @@ form{display:grid;gap:9px;min-width:min(100%,340px)}input{border:1px solid #3b4c
 .terrain-controls input[type=range]{width:100%;accent-color:#91a9d7}
 .terrain-controls button:disabled{opacity:.4;cursor:not-allowed}
 @media(max-width:760px){.terrain-editor-layout{grid-template-columns:1fr}.terrain-canvas-wrap{max-height:420px}.terrain-canvas-wrap canvas{width:min(100%,512px)}}
+
+
+/* Building Studio v1 */
+.building-studio{border-color:#536b8e;background:linear-gradient(145deg,rgba(20,29,46,.98),rgba(8,14,25,.98))}
+.building-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(190px,.65fr);gap:16px;align-items:start}
+.building-preview{min-width:0;border:1px solid #2d3f60;border-radius:12px;padding:10px;background:#090f1d}
+.building-canvas-wrap{display:flex;justify-content:center;overflow:auto;max-height:540px;padding:8px;background:#0c1525;border-radius:8px}
+.building-canvas-wrap canvas{display:block;width:min(100%,512px);height:auto;image-rendering:pixelated;touch-action:manipulation;cursor:crosshair}
+@media(max-width:760px){.building-layout{grid-template-columns:1fr}.building-canvas-wrap{max-height:420px}.building-canvas-wrap canvas{width:min(100%,512px)}}
