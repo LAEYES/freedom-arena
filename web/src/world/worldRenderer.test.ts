@@ -48,9 +48,9 @@ describe('WebGL world mesh and picking', () => {
     expect(mesh.every(Number.isFinite)).toBe(true);
   });
 
-  it('builds a low-poly avatar from six box primitives', () => {
+  it('builds a layered stylized adventurer from fifteen low-poly armor primitives', () => {
     const mesh = buildAvatarMesh(grass);
-    expect(mesh.length).toBe(6 * 36 * 6);
+    expect(mesh.length).toBe(15 * 36 * 6);
     expect(mesh.every(Number.isFinite)).toBe(true);
   });
 
