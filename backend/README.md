@@ -261,3 +261,24 @@ Fresh databases receive the duel columns and tables from `schema.sql`.
 The command ID and unique (match, turn) constraint protect retries and concurrent submissions. D1 conditional writes ensure only the expected actor can consume a turn. PvP uses isolated state and never grants PvE loot, XP or world resources.
 
 Operational limitations still requiring a later increment: automated background timeout execution (timeout is adjudicated on the next request), reconnect/resume UX, spectator privacy policy, anti-collusion/smurf detection, ranked-season resets, moderation/reporting, and a dedicated load/concurrency test against D1. Do not deploy until migrations 009 and 010 have been applied in order and CI is green.
+
+
+## FA-WORLD-045 PvP reliability and persistent ranking
+
+Apply migration 011 after migrations 009 and 010:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/011_fa_world_045_pvp_reliability.sql
+```
+
+Fresh databases receive the same tables through `schema.sql`.
+
+- `pvp_ratings` is now the durable rating and W/L/D aggregate; matchmaking reads this rating instead of treating the queue row as the source of truth.
+- `pvp_rating_events` records one result per player per match. Its unique key and `applied_at` marker make settlement retry-safe.
+- `applyPvpRatingSettlement` is shared by forfeit, knockout/draw and timeout flows. A scheduled reconciliation sweep also recovers completed matches whose rating settlement was interrupted.
+- `pvp_timeout_log` records the player whose turn expired and the awarded winner.
+- Worker scheduled handler adjudicates up to 100 expired matches and reconciles up to 100 pending rating settlements per invocation.
+- Wrangler cron runs once per minute. The configured schedule becomes active only after deploying this Worker.
+- `GET /world/:zoneId/pvp/rating` returns the authenticated player's rating and W/L/D totals.
+
+Existing D1 rollout order: migrations 009, 010, then 011. Do not deploy until CI passes and migrations are applied. No remote migration, deployment or merge is performed by this change.
