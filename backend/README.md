@@ -5,6 +5,8 @@ Production target: Cloudflare Workers + D1.
 - Worker API: `backend/worker.ts`
 - D1 bootstrap schema: `backend/schema.sql`
 - Incremental world-sync migration: `backend/migrations/002_world_sync.sql`
+- Security migration: `backend/migrations/003_fa_world_035_security.sql`
+- Authoritative command migration: `backend/migrations/004_fa_world_036_commands.sql`
 - Wrangler config: `backend/wrangler.toml`
 - The browser must never receive a Cloudflare secret.
 - Protected API routes require Supabase asymmetric JWT verification and the FA-WORLD-035 D1 rate-limit migration.
@@ -46,7 +48,8 @@ The migration adds:
 - `POST /world/:zoneId/join`: initialize or refresh a player's zone presence.
 - `POST /world/:zoneId/move`: cardinal adjacent movement guarded by source coordinates and expected player revision; updates presence and appends a movement event in one D1 batch.
 - `POST /world/:zoneId/heartbeat`: refresh presence expiry.
-- `POST /world/:zoneId/state`: compare-and-swap zone JSON state, capped at 32 KiB.
+- `POST /world/:zoneId/state`: disabled (403); zone state must be changed by future server-owned reducers.
+- `POST /world/:zoneId/command`: accepts only a combat command ID; the Worker computes the outcome and applies XP, victories, resources and threat changes. Repeated command IDs return the original result without applying rewards twice.
 
 The web client keeps this integration disabled by default. After applying the schema and deploying the Worker, enable it in the Vite build with `VITE_WORLD_SYNC_ENABLED=true` and set `VITE_API_URL` to the Worker URL.
 
@@ -92,3 +95,20 @@ Set Worker variables in the Cloudflare dashboard (or via Wrangler vars) without 
 - `SUPABASE_JWT_ISSUER`: exact value `SUPABASE_URL/auth/v1`.
 
 Supabase must issue asymmetric ES256 or RS256 access tokens and publish the corresponding public JWK set at `/.well-known/jwks.json`. The Worker fails closed if configuration, JWKS retrieval, signature, issuer, audience, or expiry validation fails. No deployment is performed by this PR.
+
+
+## FA-WORLD-036 authoritative combat
+
+Apply migration 004 after migrations 002 and 003:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/004_fa_world_036_commands.sql
+```
+
+Authenticated clients call `POST /world/:zoneId/command` with only:
+
+```json
+{ "commandId": "client-generated-unique-id-0001", "type": "combat" }
+```
+
+The client cannot submit a victory flag, enemy level, XP, resources, or damage. The Worker obtains the authenticated subject, verifies that the player is present in the requested zone, computes the encounter outcome using server-side randomness and the stored player level, then applies the result and records the command in a D1 batch. The command ID is an idempotency key; retries return the stored result. This is a minimal vertical slice, not a complete combat simulation: enemy AI, equipment-derived stats, PvP rules, loot tables and anti-collusion controls remain future work.
