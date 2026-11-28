@@ -33,6 +33,6 @@ CREATE INDEX IF NOT EXISTS idx_pvp_match_players ON pvp_matches(player_a, player
 CREATE TABLE IF NOT EXISTS pvp_match_participants (
   match_id TEXT NOT NULL REFERENCES pvp_matches(match_id) ON DELETE CASCADE,
   player_id TEXT NOT NULL,
-  PRIMARY KEY(match_id, player_id),
+  PRIMARY KEY(match_id, player_id)
   -- A player may have historical rows in many matches; active exclusivity is enforced separately.
 );
