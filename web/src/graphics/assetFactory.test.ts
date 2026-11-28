@@ -27,6 +27,7 @@ describe('Freedom Arena graphics asset factory', () => {
   it('uses identical edge-cell values for repeatable texture tiling', () => {\n    for (let index = 0; index < 16; index++) {\n      expect(tileableCellValue(99, 0, index)).toBe(tileableCellValue(99, 15, index));\n      expect(tileableCellValue(99, index, 0)).toBe(tileableCellValue(99, index, 15));\n    }\n  });\n\n  it('keeps the 64px logical tile contract and export formats explicit', () => {
     expect(GRAPHICS_PIPELINE.logicalGrid).toBe(64);
     expect(GRAPHICS_PIPELINE.formats).toContain('png');
+    expect(GRAPHICS_PIPELINE.formats).toContain('webp');
     expect(GRAPHICS_PIPELINE.supportedTileSizes).toEqual([64,128,256]);
   });
 });
