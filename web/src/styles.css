@@ -1319,3 +1319,16 @@ body{
 @media(prefers-reduced-motion:reduce){
   .world3d-stream-progress span{transition:none}
 }
+
+
+/* FA-WORLD-037 — measurable render diagnostics */
+.world3d-hud{
+  font-variant-numeric:tabular-nums;
+}
+.world3d-hud span{
+  line-height:1.45;
+}
+@media(max-width:760px){
+  .world3d-hud{max-width:calc(100% - 16px);font-size:10px}
+  .world3d-hud span{overflow-wrap:anywhere}
+}
