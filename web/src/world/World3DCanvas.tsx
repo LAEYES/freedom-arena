@@ -7,7 +7,8 @@ import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type Npc
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { assignNpcDynamicRoles, getNpcTacticalProfile } from './npcTactics';
-import { electNpcSquadLeader, formationAnchor, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
+import { planNpcDirectionalCoverRoute } from './npcCover';
+import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
@@ -141,7 +142,8 @@ export function World3DCanvas({
   const npcAgentsRef = useRef<NpcAgent[]>([]);
   const npcBehaviorAgentsRef = useRef<Array<NpcBehaviorAgent | null>>([]);
   const npcFormationMotionsRef = useRef<Map<string, NpcFormationMotion>>(new Map());
-  const squadFormationStateRef = useRef<{ leaderId: string | null; anchor: { i: number; j: number } | null; elapsedMs: number; memberIds: string[] }>({ leaderId: null, anchor: null, elapsedMs: 0, memberIds: [] });
+  const squadFormationStatesRef = useRef<Map<string, { leaderId: string; anchor: { i: number; j: number }; elapsedMs: number; memberIds: string[] }>>(new Map());
+  const npcSquadMembershipRef = useRef<Map<string, string>>(new Map());
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
   const onSignalSelectRef = useRef(onSignalSelect);
@@ -186,7 +188,8 @@ export function World3DCanvas({
     npcAgentsRef.current = initialNpcAgents;
     npcBehaviorAgentsRef.current = sceneNpcs.map(() => null);
     npcFormationMotionsRef.current.clear();
-    squadFormationStateRef.current = { leaderId: null, anchor: null, elapsedMs: 0, memberIds: [] };
+    squadFormationStatesRef.current.clear();
+    npcSquadMembershipRef.current.clear();
   }, [initialNpcAgents, sceneNpcs]);
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
@@ -370,7 +373,7 @@ export function World3DCanvas({
         gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
 
         npcAgentsRef.current = advanceNpcAgents(npcAgentsRef.current, delta);
-        squadFormationStateRef.current.elapsedMs += Number.isFinite(delta) ? Math.max(0, Math.min(100, delta)) : 0;
+        for (const squadState of squadFormationStatesRef.current.values()) squadState.elapsedMs += Number.isFinite(delta) ? Math.max(0, Math.min(100, delta)) : 0;
         const npcOutput: number[] = [];
         const playerTile = { i: positionRef.current.i, j: positionRef.current.j };
         const patrolPoses = npcAgentsRef.current.map(getNpcAgentPose);
@@ -418,10 +421,9 @@ export function World3DCanvas({
               stepDurationMs: tacticalProfile.stepDurationMs,
               alertHoldMs: 6000,
             });
-            const currentSquad = squadFormationStateRef.current;
-            if (shouldRegroupNpcSquad(actor.id, currentSquad.memberIds, previousBehaviorState, behaviorAgent.state)) {
-              // Disengagement is coordinated: cancel individual return routes and
-              // regroup the known squad around its elected local leader.
+            const squadId = npcSquadMembershipRef.current.get(actor.id);
+            const currentSquad = squadId ? squadFormationStatesRef.current.get(squadId) : undefined;
+            if (currentSquad && shouldRegroupNpcSquad(actor.id, currentSquad.memberIds, previousBehaviorState, behaviorAgent.state)) {
               for (let memberIndex = 0; memberIndex < sceneNpcs.length; memberIndex++) {
                 const member = sceneNpcs[memberIndex];
                 if (!currentSquad.memberIds.includes(member.id)) continue;
@@ -472,109 +474,74 @@ export function World3DCanvas({
                 if (!active || active.state !== 'ALERT') return [];
                 return [{ id: member.id, position: active.position, state: active.state }];
               });
-              const squadLeader = electNpcSquadLeader(squadCandidates);
-              const leaderIndex = squadLeader
-                ? sceneNpcs.findIndex(member => member.id === squadLeader.id)
-                : index;
-              const leaderAgent = npcBehaviorAgentsRef.current[leaderIndex] ?? behaviorAgent;
-              const leaderTile = squadLeader?.position ?? sourceTile;
-              const groupMembers = sceneNpcs
-                .map((member, memberIndex) => {
-                  if (memberIndex === leaderIndex) return null;
+              const localSquads = partitionNpcSquads(terrainMap, squadCandidates, 6);
+              for (const squad of localSquads) {
+                const squadLeader = electNpcSquadLeader(squad);
+                if (!squadLeader) continue;
+                const leaderIndex = sceneNpcs.findIndex(member => member.id === squadLeader.id);
+                const leaderAgent = npcBehaviorAgentsRef.current[leaderIndex];
+                if (!leaderAgent) continue;
+                const memberIds = squad.map(member => member.id);
+                const groupMembers = squad.filter(member => member.id !== squadLeader.id).flatMap(member => {
+                  const memberIndex = sceneNpcs.findIndex(candidate => candidate.id === member.id);
                   const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
-                  if (!memberAgent || memberAgent.state !== 'ALERT') return null;
-                  return {
-                    id: member.id,
-                    role: getNpcTacticalProfile(member.activity).role,
-                    position: memberAgent.position,
-                  };
-                })
-                .filter((member): member is NonNullable<typeof member> => member !== null);
-              const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
-              for (const member of groupMembers) occupied.add(tileKey(member.position.i, member.position.j));
-              const dynamicRoles = new Map(assignNpcDynamicRoles(
-                groupMembers.map(member => ({ id: member.id, position: member.position })),
-                playerTile,
-              ).map(assignment => [assignment.id, assignment.role]));
-              const formationMembers = groupMembers.map(member => ({
-                ...member,
-                role: dynamicRoles.get(member.id) ?? member.role,
-              }));
-              const formationPlans = planNpcFormation(
-                terrainMap, leaderTile, leaderAgent.facing, formationMembers, occupied,
-              );
-              for (const plan of formationPlans) {
-                npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+                  if (!memberAgent) return [];
+                  return [{ id: member.id, role: getNpcTacticalProfile(sceneNpcs[memberIndex].activity).role, position: memberAgent.position }];
+                });
+                const occupied = new Set<string>([tileKey(squadLeader.position.i, squadLeader.position.j)]);
+                for (const member of groupMembers) occupied.add(tileKey(member.position.i, member.position.j));
+                const dynamicRoles = new Map(assignNpcDynamicRoles(groupMembers.map(member => ({ id: member.id, position: member.position })), playerTile)
+                  .map(assignment => [assignment.id, assignment.role]));
+                const formationMembers = groupMembers.map(member => ({ ...member, role: dynamicRoles.get(member.id) ?? member.role }));
+                const formationPlans = planNpcFormation(terrainMap, squadLeader.position, leaderAgent.facing, formationMembers, occupied);
+                for (const plan of formationPlans) npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+                for (const memberId of memberIds) npcSquadMembershipRef.current.set(memberId, squadLeader.id);
+                squadFormationStatesRef.current.set(squadLeader.id, {
+                  leaderId: squadLeader.id, anchor: { i: squadLeader.position.i, j: squadLeader.position.j },
+                  elapsedMs: 0, memberIds,
+                });
               }
-              squadFormationStateRef.current = {
-                leaderId: squadLeader?.id ?? actor.id,
-                anchor: formationAnchor({ x: leaderTile.i, y: leaderTile.j }),
-                elapsedMs: 0,
-                memberIds: [...new Set([...squadCandidates.map(candidate => candidate.id), actor.id])],
-              };
             }
-
-            // The elected leader owns squad refreshes. Followers are replanned from
-            // their current interpolated positions, never from stale spawn tiles.
-            const activeSquad = sceneNpcs.flatMap((member, memberIndex) => {
-              const active = npcBehaviorAgentsRef.current[memberIndex];
-              if (!active || active.state === 'IDLE' || active.state === 'PATROL') return [];
-              return [{ id: member.id, position: active.position, state: active.state }];
-            });
-            const electedLeader = electNpcSquadLeader(activeSquad);
-            const squadState = squadFormationStateRef.current;
-            if (electedLeader?.id === actor.id && squadState.leaderId === actor.id && squadState.anchor
-              && shouldRefreshNpcFormation(squadState.anchor, behaviorAgent.position, squadState.elapsedMs,
-                { displacementTiles: 2, cooldownMs: 900 })) {
-              const leaderTile = behaviorAgent.position;
-              const members = sceneNpcs.flatMap((member, memberIndex) => {
-                if (memberIndex === index) return [];
-                const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
-                if (!memberAgent || memberAgent.state !== 'ALERT') return [];
-                const existingMotion = npcFormationMotionsRef.current.get(member.id);
-                const existingPose = existingMotion ? getNpcFormationPose(existingMotion) : null;
-                const current = existingPose
-                  ? { i: Math.round(existingPose.x), j: Math.round(existingPose.y) }
-                  : memberAgent.position;
-                return [{ actor: member, index: memberIndex, agent: memberAgent, position: current }];
+            const memberSquadId = npcSquadMembershipRef.current.get(actor.id);
+            const squadState = memberSquadId ? squadFormationStatesRef.current.get(memberSquadId) : undefined;
+            if (squadState) {
+              const activeSquad = squadState.memberIds.flatMap(memberId => {
+                const memberIndex = sceneNpcs.findIndex(member => member.id === memberId);
+                const active = npcBehaviorAgentsRef.current[memberIndex];
+                if (!active || active.state === 'IDLE' || active.state === 'PATROL') return [];
+                return [{ id: memberId, position: active.position, state: active.state }];
               });
-              const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
-              for (const member of members) occupied.add(tileKey(member.position.i, member.position.j));
-              const roleAssignments = new Map(assignNpcDynamicRoles(
-                members.map(member => ({ id: member.actor.id, position: member.position })),
-                playerTile,
-              ).map(assignment => [assignment.id, assignment.role]));
-              const plans = planNpcFormation(
-                terrainMap, leaderTile, behaviorAgent.facing,
-                members.map(member => ({
-                  id: member.actor.id,
-                  role: roleAssignments.get(member.actor.id) ?? getNpcTacticalProfile(member.actor.activity).role,
-                  position: member.position,
-                })),
-                occupied,
-              );
-              for (const member of members) {
-                npcFormationMotionsRef.current.delete(member.actor.id);
-                const synchronized = {
-                  ...member.agent,
-                  position: member.position,
-                  previousPosition: member.position,
-                  path: [member.position],
-                  pathIndex: 0,
-                  stepElapsedMs: 0,
-                  targetKey: null,
-                };
-                npcBehaviorAgentsRef.current[member.index] = synchronized;
+              const electedLeader = electNpcSquadLeader(activeSquad);
+              if (electedLeader?.id === actor.id && squadState.leaderId === actor.id
+                && shouldRefreshNpcFormation(squadState.anchor, behaviorAgent.position, squadState.elapsedMs, { displacementTiles: 2, cooldownMs: 900 })) {
+                const leaderTile = behaviorAgent.position;
+                const members = squadState.memberIds.flatMap(memberId => {
+                  if (memberId === actor.id) return [];
+                  const memberIndex = sceneNpcs.findIndex(member => member.id === memberId);
+                  const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
+                  if (!memberAgent || memberAgent.state !== 'ALERT') return [];
+                  const existingMotion = npcFormationMotionsRef.current.get(memberId);
+                  const existingPose = existingMotion ? getNpcFormationPose(existingMotion) : null;
+                  const current = existingPose ? { i: Math.round(existingPose.x), j: Math.round(existingPose.y) } : memberAgent.position;
+                  return [{ actor: sceneNpcs[memberIndex], index: memberIndex, agent: memberAgent, position: current }];
+                });
+                const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
+                for (const member of members) occupied.add(tileKey(member.position.i, member.position.j));
+                const roleAssignments = new Map(assignNpcDynamicRoles(members.map(member => ({ id: member.actor.id, position: member.position })), playerTile)
+                  .map(assignment => [assignment.id, assignment.role]));
+                const plans = planNpcFormation(terrainMap, leaderTile, behaviorAgent.facing,
+                  members.map(member => ({ id: member.actor.id, role: roleAssignments.get(member.actor.id) ?? getNpcTacticalProfile(member.actor.activity).role, position: member.position })), occupied);
+                for (const member of members) {
+                  npcFormationMotionsRef.current.delete(member.actor.id);
+                  npcBehaviorAgentsRef.current[member.index] = {
+                    ...member.agent, position: member.position, previousPosition: member.position,
+                    path: [member.position], pathIndex: 0, stepElapsedMs: 0, targetKey: null,
+                  };
+                }
+                for (const plan of plans) npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+                squadState.anchor = formationAnchor({ x: leaderTile.i, y: leaderTile.j });
+                squadState.elapsedMs = 0;
               }
-              for (const plan of plans) {
-                npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
-              }
-              squadFormationStateRef.current = {
-                leaderId: actor.id,
-                anchor: formationAnchor({ x: leaderTile.i, y: leaderTile.j }),
-                elapsedMs: 0,
-                memberIds: squadState.memberIds,
-              };
             }
             pose = getNpcBehaviorPose(behaviorAgent);
             const formationMotion = npcFormationMotionsRef.current.get(actor.id);
