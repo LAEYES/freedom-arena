@@ -24,3 +24,16 @@ test("only allowlisted PvP actions are accepted",()=>{
   assert.equal(validatePvpAction("admin_win"),null);
   assert.equal(validatePvpAction({action:"strike"}),null);
 });
+
+test("Elo remains zero-sum for ratings away from configured boundaries",()=>{
+  const result=calculateElo(1100,1450,1);
+  assert.equal(result.ratingA+result.ratingB,2550);
+  assert.ok(result.ratingA>1100);
+  assert.ok(result.ratingB<1450);
+});
+test("Elo clamps both ratings at the configured minimum and maximum",()=>{
+  const low=calculateElo(100,1000,0);
+  const high=calculateElo(4000,3000,1);
+  assert.ok(low.ratingA>=100&&low.ratingB<=4000);
+  assert.ok(high.ratingA<=4000&&high.ratingB>=100);
+});
