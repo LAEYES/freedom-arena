@@ -450,6 +450,7 @@ export function World3DCanvas({
                 .map((member, memberIndex) => {
                   if (memberIndex === index) return null;
                   const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
+                  if (!memberAgent || memberAgent.state !== 'ALERT') return null;
                   const memberPatrol = patrolPoses[memberIndex];
                   const memberPosition = memberAgent?.position ?? {
                     i: Math.round(memberPatrol?.x ?? member.x),
@@ -473,6 +474,7 @@ export function World3DCanvas({
             }
             pose = getNpcBehaviorPose(behaviorAgent);
             const formationMotion = npcFormationMotionsRef.current.get(actor.id);
+            const formationActive = !!formationMotion && behaviorAgent.state === 'ALERT';
             if (formationMotion && behaviorAgent.state === 'ALERT') {
               const advancedMotion = advanceNpcFormationMotion(formationMotion, delta);
               const formationPose = getNpcFormationPose(advancedMotion);
@@ -502,7 +504,9 @@ export function World3DCanvas({
               behaviorAgent.path[behaviorAgent.pathIndex + 1]?.j ?? behaviorAgent.position.j);
             const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
             if (!fromTile || !toTile || !tile?.walkable) continue;
-            groundZ = terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
+            groundZ = formationActive
+              ? terrainWorldHeight(tile)
+              : terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
           } else {
             const fromTile = getTerrainTile(terrainMap, patrolAgent.path[patrolAgent.fromIndex].i, patrolAgent.path[patrolAgent.fromIndex].j);
             const toTile = getTerrainTile(terrainMap, patrolAgent.path[patrolAgent.toIndex].i, patrolAgent.path[patrolAgent.toIndex].j);
