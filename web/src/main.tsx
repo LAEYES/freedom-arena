@@ -9,7 +9,7 @@ import { CharacterStudio } from './graphics/CharacterStudio';
 import { TerrainEditor } from './graphics/TerrainEditor';
 import { BuildingStudio } from './graphics/BuildingStudio';
 import { AnimationStudio } from './graphics/AnimationStudio';
-import { drawCharacterSprite, type CharacterFaction, type CharacterPose } from './graphics/characterFactory';
+import { drawCharacterSprite, drawCharacterEffects, type CharacterFaction, type CharacterPose } from './graphics/characterFactory';
 import { CHARACTER_ANIMATION_CLIPS, evaluateAnimation } from './graphics/animationEngine';
 import { createAsset, paintProceduralTile, type Biome } from './graphics/assetFactory';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
@@ -345,6 +345,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttackA
         dynamicCtx.globalAlpha = remoteMotion.opacity;
         dynamicCtx.scale(remoteMotion.scale, remoteMotion.scale);
         drawCharacterSprite(dynamicCtx, 0, 0, 32, { faction: remoteCharacterFaction, hostile: remoteCharacterFaction === 'Eclipse', role: remoteCharacterFaction === 'Nomads' ? 'scout' : remoteCharacterFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: remotePose, frame: Math.floor(remoteFrame), facing: remoteFacing });
+        drawCharacterEffects(dynamicCtx, 0, 0, { faction: remoteCharacterFaction, role: remoteCharacterFaction === 'Nomads' ? 'scout' : remoteCharacterFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: remotePose, frame: Math.floor(remoteFrame), size: 32 });
         dynamicCtx.restore();
         dynamicCtx.fillStyle='#dce7ff';dynamicCtx.font='600 9px Inter,sans-serif';dynamicCtx.fillText(remote.name+' · '+remote.faction,sx+9,sy+3);
       });
@@ -381,6 +382,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttackA
       dynamicCtx.globalAlpha = playerMotion.opacity;
       dynamicCtx.scale(playerMotion.scale, playerMotion.scale);
       drawCharacterSprite(dynamicCtx, 0, 0, 40, { faction: playerFaction, hostile: false, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame), facing: playerFacing.current });
+      drawCharacterEffects(dynamicCtx, 0, 0, { faction: playerFaction, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame), size: 40 });
       dynamicCtx.restore();
       dynamicCtx.fillStyle = '#fff';
       dynamicCtx.font = '600 10px Inter,sans-serif';
