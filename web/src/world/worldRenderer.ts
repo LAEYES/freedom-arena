@@ -116,6 +116,12 @@ export type AvatarAnimation = {
   phase?: number;
   /** Blend from idle (0) to full locomotion (1). */
   walkAmount?: number;
+  /** Visual-only action pose. */
+  action?: 'idle' | 'walk' | 'run' | 'attack' | 'block' | 'hit' | 'death';
+  /** Signed procedural arm articulation. */
+  armSwing?: number;
+  /** Forward/back torso lean in world-space proportion. */
+  bodyLean?: number;
 };
 
 /** Stylized low-poly adventurer: layered faction armor, readable equipment and deterministic gait. */
@@ -126,16 +132,18 @@ export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = 
   const ground = (animation.groundZ ?? terrainWorldHeight(tile)) + 0.015;
   const walk = Math.max(0, Math.min(1, animation.walkAmount ?? 0));
   const phase = animation.phase ?? 0;
-  const swing = Math.sin(phase) * 0.13 * walk;
+  const action = animation.action ?? (walk > 0 ? 'walk' : 'idle');
+  const swing = animation.armSwing ?? Math.sin(phase) * 0.13 * walk;
   const oppositeSwing = -swing;
-  const bob = Math.abs(Math.sin(phase * 2)) * 0.035 * walk;
+  const bob = (action === 'death' ? -0.12 : action === 'hit' ? 0.025 : Math.abs(Math.sin(phase * 2)) * 0.035 * walk);
+  const lean = animation.bodyLean ?? (action === 'run' ? 0.13 : action === 'attack' ? 0.09 : action === 'hit' ? -0.12 : 0);
   const armor: RGB = [0.19, 0.43, 0.70];
   const armorLight: RGB = [0.36, 0.64, 0.91];
   const armorDark: RGB = [0.10, 0.23, 0.39];
   const metal: RGB = [0.77, 0.70, 0.48];
 
   // Core silhouette and helmet.
-  pushBox(output, { x, y, z: ground + 0.59 + bob }, { width: 0.35, depth: 0.29, height: 0.47 }, armor);
+  pushBox(output, { x, y: y - lean * 0.22, z: ground + 0.59 + bob }, { width: 0.35, depth: 0.29, height: 0.47 }, armor);
   pushBox(output, { x, y, z: ground + 0.98 + bob }, { width: 0.27, depth: 0.27, height: 0.27 }, [0.83, 0.72, 0.57]);
   pushBox(output, { x, y: y - 0.025, z: ground + 1.115 + bob }, { width: 0.30, depth: 0.29, height: 0.075 }, armorDark);
   pushBox(output, { x, y: y - 0.17, z: ground + 1.015 + bob }, { width: 0.17, depth: 0.035, height: 0.045 }, metal);
@@ -145,6 +153,9 @@ export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = 
   pushBox(output, { x: x + 0.245, y, z: ground + 0.76 + bob }, { width: 0.19, depth: 0.30, height: 0.20 }, armorLight);
   pushBox(output, { x: x - 0.25, y: y + oppositeSwing, z: ground + 0.55 + bob }, { width: 0.115, depth: 0.14, height: 0.34 }, armorDark);
   pushBox(output, { x: x + 0.25, y: y + swing, z: ground + 0.55 + bob }, { width: 0.115, depth: 0.14, height: 0.34 }, armorDark);
+  // Equipment sockets are deterministic visual attachments, not gameplay hitboxes.
+  pushBox(output, { x: x + 0.31, y: y - 0.02 - lean * 0.2, z: ground + 0.40 + bob }, { width: 0.055, depth: 0.075, height: action === 'attack' ? 0.56 : 0.43 }, metal);
+  pushBox(output, { x: x - 0.31, y: y - 0.02, z: ground + 0.54 + bob }, { width: 0.075, depth: 0.22, height: 0.29 }, armorLight);
   pushBox(output, { x, y: y - 0.155, z: ground + 0.62 + bob }, { width: 0.19, depth: 0.045, height: 0.25 }, armorLight);
   pushBox(output, { x, y: y - 0.185, z: ground + 0.62 + bob }, { width: 0.055, depth: 0.025, height: 0.16 }, metal);
 
