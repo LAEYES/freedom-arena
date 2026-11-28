@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendances : FA-WORLD-002, FA-WORLD-003
-- Statut : implémentation et tests ajoutés ; CI en attente.
+- Statut : VALIDATED — CI réussie.
 
 ## Modèle de terrain
 
@@ -59,4 +59,14 @@ Tests ajoutés pour :
 - validation des paramètres,
 - dimensions configurables.
 
-La validation finale dépend de GitHub Actions.
+## Résultats de qualification
+
+- Première passe : 43/44 tests réussis ; un test de carte 32 × 48 utilisait le spawn par défaut (32, 32), hors limites.
+- Correction : le test de dimensions personnalisées fixe explicitement le spawn à (16, 24).
+- GitHub Actions — Web build, run #154 et #155 : **success**.
+- Vitest : **44/44 tests réussis**, 7 fichiers de test.
+- TypeScript : **success**.
+- Vite production build : **success**, 69 modules transformés.
+- Hostinger Deploy, runs #86/#87 : build réussi ; étape `Upload dist to Hostinger` **skipped** car pull request.
+
+**FA-WORLD-004 : VALIDATED.** La génération terrain 64 × 64, déterministe et indépendante du renderer, est validée.
