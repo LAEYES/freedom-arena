@@ -208,6 +208,9 @@ export function World3DCanvas({
   const zoomRef = useRef(1);
   const azimuthRef = useRef(Math.PI / 4);
   const cameraModeRef = useRef<'isometric' | 'thirdPerson'>('isometric');
+  const [graphicsQuality, setGraphicsQuality] = useState<'performance' | 'balanced' | 'quality'>('balanced');
+  const graphicsQualityRef = useRef<'performance' | 'balanced' | 'quality'>('balanced');
+  graphicsQualityRef.current = graphicsQuality;
   const [zoom, setZoom] = useState(1);
   const [azimuth, setAzimuth] = useState(Math.PI / 4);
   const [cameraMode, setCameraMode] = useState<'isometric' | 'thirdPerson'>('isometric');
@@ -509,7 +512,10 @@ export function World3DCanvas({
           frameId = window.requestAnimationFrame(draw);
           return;
         }
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+        // Explicit quality tiers cap render-target resolution without changing simulation or world coordinates.
+        const qualityScale = graphicsQualityRef.current === 'performance' ? 1
+          : graphicsQualityRef.current === 'quality' ? 1.75 : 1.35;
+        const dpr = Math.min(window.devicePixelRatio || 1, qualityScale);
         const width = Math.max(1, Math.floor(rect.width * dpr));
         const height = Math.max(1, Math.floor(rect.height * dpr));
         if (canvas.width !== width || canvas.height !== height) {
@@ -1171,13 +1177,14 @@ export function World3DCanvas({
         <button type="button" title="Rotation gauche" onClick={() => rotate(-Math.PI / 12)}>↶</button>
         <button type="button" title={cameraMode === 'isometric' ? 'Passer en troisième personne' : 'Passer en caméra isométrique'} onClick={() => setCameraMode(value => value === 'isometric' ? 'thirdPerson' : 'isometric')}>{cameraMode === 'isometric' ? '3P' : 'ISO'}</button>
         <button type="button" title="Rotation droite" onClick={() => rotate(Math.PI / 12)}>↷</button>
+        <button type="button" title={`Qualité graphique : ${graphicsQuality}. Cliquer pour changer`} aria-label={`Qualité graphique ${graphicsQuality}`} onClick={() => setGraphicsQuality(value => value === 'performance' ? 'balanced' : value === 'balanced' ? 'quality' : 'performance')}>GFX · {graphicsQuality === 'performance' ? 'ÉCO' : graphicsQuality === 'quality' ? 'MAX' : 'ÉQ'}</button>
         <button type="button" title="Réinitialiser la caméra" onClick={() => { setZoom(1); setAzimuth(Math.PI / 4); setCameraMode('isometric'); }}>⌂</button>
       </div>
       <div className="world3d-hud">
         <strong>FA-WORLD · WEBGL2</strong>
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
-        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
+        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen · rendu {graphicsQuality === 'performance' ? 'économie' : graphicsQuality === 'quality' ? 'qualité' : 'équilibré'}</span>
         <span>{hud.status}</span>
       </div>
       {rendererError && (
