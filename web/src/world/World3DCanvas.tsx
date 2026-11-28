@@ -7,7 +7,7 @@ import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type Npc
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { getNpcTacticalProfile } from './npcTactics';
-import { electNpcSquadLeader, formationAnchor, shouldRefreshNpcFormation } from './npcSquad';
+import { electNpcSquadLeader, formationAnchor, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
@@ -141,7 +141,7 @@ export function World3DCanvas({
   const npcAgentsRef = useRef<NpcAgent[]>([]);
   const npcBehaviorAgentsRef = useRef<Array<NpcBehaviorAgent | null>>([]);
   const npcFormationMotionsRef = useRef<Map<string, NpcFormationMotion>>(new Map());
-  const squadFormationStateRef = useRef<{ leaderId: string | null; anchor: { i: number; j: number } | null; elapsedMs: number }>({ leaderId: null, anchor: null, elapsedMs: 0 });
+  const squadFormationStateRef = useRef<{ leaderId: string | null; anchor: { i: number; j: number } | null; elapsedMs: number; memberIds: string[] }>({ leaderId: null, anchor: null, elapsedMs: 0, memberIds: [] });
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
   const onSignalSelectRef = useRef(onSignalSelect);
@@ -186,7 +186,7 @@ export function World3DCanvas({
     npcAgentsRef.current = initialNpcAgents;
     npcBehaviorAgentsRef.current = sceneNpcs.map(() => null);
     npcFormationMotionsRef.current.clear();
-    squadFormationStateRef.current = { leaderId: null, anchor: null, elapsedMs: 0 };
+    squadFormationStateRef.current = { leaderId: null, anchor: null, elapsedMs: 0, memberIds: [] };
   }, [initialNpcAgents, sceneNpcs]);
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
@@ -418,6 +418,21 @@ export function World3DCanvas({
               stepDurationMs: tacticalProfile.stepDurationMs,
               alertHoldMs: 6000,
             });
+            const currentSquad = squadFormationStateRef.current;
+            if (shouldRegroupNpcSquad(actor.id, currentSquad.memberIds, previousBehaviorState, behaviorAgent.state)) {
+              // Disengagement is coordinated: cancel individual return routes and
+              // regroup the known squad around its elected local leader.
+              for (let memberIndex = 0; memberIndex < sceneNpcs.length; memberIndex++) {
+                const member = sceneNpcs[memberIndex];
+                if (!currentSquad.memberIds.includes(member.id)) continue;
+                const memberAgent = memberIndex === index ? behaviorAgent : npcBehaviorAgentsRef.current[memberIndex];
+                if (!memberAgent || (memberAgent.state !== 'CHASE' && memberAgent.state !== 'RETURN')) continue;
+                const regrouped = prepareNpcSquadRegroup(memberAgent);
+                npcBehaviorAgentsRef.current[memberIndex] = regrouped;
+                if (memberIndex === index) behaviorAgent = regrouped;
+                npcFormationMotionsRef.current.delete(member.id);
+              }
+            }
             npcBehaviorAgentsRef.current[index] = behaviorAgent;
             if (previousBehaviorState !== 'ALERT' && behaviorAgent.state === 'ALERT') {
               const sourceTile = behaviorAgent.position;
@@ -486,6 +501,7 @@ export function World3DCanvas({
                 leaderId: squadLeader?.id ?? actor.id,
                 anchor: formationAnchor({ x: leaderTile.i, y: leaderTile.j }),
                 elapsedMs: 0,
+                memberIds: [...new Set([...squadCandidates.map(candidate => candidate.id), actor.id])],
               };
             }
 
@@ -544,6 +560,7 @@ export function World3DCanvas({
                 leaderId: actor.id,
                 anchor: formationAnchor({ x: leaderTile.i, y: leaderTile.j }),
                 elapsedMs: 0,
+                memberIds: squadState.memberIds,
               };
             }
             pose = getNpcBehaviorPose(behaviorAgent);
