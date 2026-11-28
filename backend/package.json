@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test combatEngine.test.ts enemyAI.test.ts pvpEngine.test.ts pvpSeasons.test.ts"
+    "test": "node --experimental-strip-types --test combatEngine.test.ts enemyAI.test.ts pvpEngine.test.ts pvpSeasons.test.ts",
+    "bench:pvp": "node --experimental-strip-types pvpSeason.bench.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

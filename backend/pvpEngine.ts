@@ -13,3 +13,10 @@ export function calculateElo(ratingA:number,ratingB:number,scoreA:0|0.5|1,k=32):
 export function validatePvpAction(value:unknown):"strike"|"guard"|"skill"|null {
   return value==="strike"||value==="guard"||value==="skill"?value:null;
 }
+
+
+/** Maps one unsigned 32-bit cryptographic random word to [0.9, 1.1). */
+export function pvpDamageVariance(randomWord: number): number {
+  if (!Number.isInteger(randomWord) || randomWord < 0 || randomWord > 0xffffffff) return 0.9;
+  return 0.9 + (randomWord / 0x1_0000_0000) * 0.2;
+}
