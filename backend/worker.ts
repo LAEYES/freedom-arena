@@ -271,6 +271,23 @@ export default {
         }
       }
 
+      if (request.method === "GET" && action === "inventory") {
+        try {
+          const [items, recent] = await Promise.all([
+            env.DB.prepare("SELECT item_id,quantity,updated_at FROM world_inventory WHERE player_id=? AND quantity>0 ORDER BY item_id")
+              .bind(identity.subject).all<{ item_id: string; quantity: number; updated_at: string }>(),
+            env.DB.prepare("SELECT item_id,quantity,reason,created_at FROM world_inventory_log WHERE player_id=? ORDER BY created_at DESC LIMIT 30")
+              .bind(identity.subject).all<Record<string, unknown>>(),
+          ]);
+          return json({
+            items: items.results.map(item => ({ itemId: item.item_id, quantity: item.quantity, updatedAt: item.updated_at })),
+            recentTransactions: recent.results.map(entry => ({
+              itemId: entry.item_id, quantity: entry.quantity, reason: entry.reason, createdAt: entry.created_at,
+            })),
+          });
+        } catch { return json({ error: "inventory_read_failed" }, 500); }
+      }
+
       if (request.method === "POST" && action === "command") {
         const body = await request.json().catch(() => null) as { commandId?: unknown; type?: unknown } | null;
         if (!body || typeof body.commandId !== 'string'
