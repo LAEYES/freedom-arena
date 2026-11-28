@@ -6,7 +6,7 @@ import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } fro
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
-import { getNpcTacticalProfile } from './npcTactics';
+import { assignNpcDynamicRoles, getNpcTacticalProfile } from './npcTactics';
 import { electNpcSquadLeader, formationAnchor, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
@@ -492,8 +492,16 @@ export function World3DCanvas({
                 .filter((member): member is NonNullable<typeof member> => member !== null);
               const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
               for (const member of groupMembers) occupied.add(tileKey(member.position.i, member.position.j));
+              const dynamicRoles = new Map(assignNpcDynamicRoles(
+                groupMembers.map(member => ({ id: member.id, position: member.position })),
+                playerTile,
+              ).map(assignment => [assignment.id, assignment.role]));
+              const formationMembers = groupMembers.map(member => ({
+                ...member,
+                role: dynamicRoles.get(member.id) ?? member.role,
+              }));
               const formationPlans = planNpcFormation(
-                terrainMap, leaderTile, leaderAgent.facing, groupMembers, occupied,
+                terrainMap, leaderTile, leaderAgent.facing, formationMembers, occupied,
               );
               for (const plan of formationPlans) {
                 npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
@@ -532,11 +540,15 @@ export function World3DCanvas({
               });
               const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
               for (const member of members) occupied.add(tileKey(member.position.i, member.position.j));
+              const roleAssignments = new Map(assignNpcDynamicRoles(
+                members.map(member => ({ id: member.actor.id, position: member.position })),
+                playerTile,
+              ).map(assignment => [assignment.id, assignment.role]));
               const plans = planNpcFormation(
                 terrainMap, leaderTile, behaviorAgent.facing,
                 members.map(member => ({
                   id: member.actor.id,
-                  role: getNpcTacticalProfile(member.actor.activity).role,
+                  role: roleAssignments.get(member.actor.id) ?? getNpcTacticalProfile(member.actor.activity).role,
                   position: member.position,
                 })),
                 occupied,
