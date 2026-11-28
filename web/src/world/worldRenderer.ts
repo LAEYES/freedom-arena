@@ -154,7 +154,7 @@ export type WorldActorVisual = {
   x: number;
   y: number;
   faction: 'Aegis' | 'Nomads' | 'Eclipse' | 'Neutral';
-  role?: 'guard' | 'scout' | 'mystic';
+  role?: 'guard' | 'scout' | 'mystic' | 'merchant';
   activity?: string;
 };
 
