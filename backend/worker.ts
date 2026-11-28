@@ -126,7 +126,6 @@ async function applyPvpRatingSettlement(db: D1Database, matchId: string): Promis
       db.prepare("INSERT INTO pvp_season_ratings(season_id,player_id,rating,matches_played,wins,losses,draws) SELECT season_id,player_id,1000+rating_delta,1,CASE WHEN result='win' THEN 1 ELSE 0 END,CASE WHEN result='loss' THEN 1 ELSE 0 END,CASE WHEN result='draw' THEN 1 ELSE 0 END FROM pvp_season_events WHERE match_id=? AND applied_at IS NULL ON CONFLICT(season_id,player_id) DO UPDATE SET rating=MAX(100,MIN(4000,pvp_season_ratings.rating+excluded.rating-1000)),matches_played=pvp_season_ratings.matches_played+1,wins=pvp_season_ratings.wins+excluded.wins,losses=pvp_season_ratings.losses+excluded.losses,draws=pvp_season_ratings.draws+excluded.draws,updated_at=CURRENT_TIMESTAMP").bind(matchId),
       db.prepare("UPDATE pvp_season_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId)
     ] : []),
-    db.prepare("UPDATE pvp_season_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId),
     db.prepare("UPDATE pvp_rating_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId),
     db.prepare("UPDATE pvp_queue SET rating=(SELECT rating FROM pvp_ratings WHERE player_id=pvp_queue.player_id),status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id IN (?,?)").bind(match.player_a,match.player_b),
     db.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
