@@ -73,9 +73,16 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
     in vec3 aPosition;
     in vec3 aColor;
     uniform mat4 uViewProjection;
+    uniform float uTime;
+    uniform float uWeatherMotion;
     out vec3 vColor;
     void main() {
-      gl_Position = uViewProjection * vec4(aPosition, 1.0);
+      vec3 animatedPosition = aPosition;
+      float phase = uTime * 1.35 + aPosition.x * 0.17 + aPosition.y * 0.13;
+      animatedPosition.x += sin(phase) * 0.035 * uWeatherMotion;
+      animatedPosition.y += cos(phase * 0.73) * 0.022 * uWeatherMotion;
+      animatedPosition.z += sin(phase * 0.91) * 0.018 * uWeatherMotion;
+      gl_Position = uViewProjection * vec4(animatedPosition, 1.0);
       vColor = aColor;
     }
   `;
@@ -221,6 +228,8 @@ export function World3DCanvas({
     let tintLocation: WebGLUniformLocation | null = null;
     let fogColorLocation: WebGLUniformLocation | null = null;
     let fogAmountLocation: WebGLUniformLocation | null = null;
+    let timeLocation: WebGLUniformLocation | null = null;
+    let weatherMotionLocation: WebGLUniformLocation | null = null;
     let disposed = false;
 
     try {
@@ -237,7 +246,9 @@ export function World3DCanvas({
       tintLocation = gl.getUniformLocation(program, 'uTint');
       fogColorLocation = gl.getUniformLocation(program, 'uFogColor');
       fogAmountLocation = gl.getUniformLocation(program, 'uFogAmount');
-      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation) {
+      timeLocation = gl.getUniformLocation(program, 'uTime');
+      weatherMotionLocation = gl.getUniformLocation(program, 'uWeatherMotion');
+      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation || !timeLocation || !weatherMotionLocation) {
         throw new Error('Attributs ou uniformes WebGL2 introuvables.');
       }
 
@@ -326,6 +337,8 @@ export function World3DCanvas({
         gl.uniform3fv(tintLocation, ambient);
         gl.uniform3fv(fogColorLocation, fog);
         gl.uniform1f(fogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
+        gl.uniform1f(timeLocation, time * 0.001);
+        gl.uniform1f(weatherMotionLocation, 0);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffer);
         bindVertexLayout();
@@ -336,8 +349,10 @@ export function World3DCanvas({
         gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
+        gl.uniform1f(weatherMotionLocation, 1);
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, weatherVertices.length / 6);
+        gl.uniform1f(weatherMotionLocation, 0);
 
         const currentPosition = positionRef.current;
         const currentTile = getTerrainTile(terrainMap, currentPosition.i, currentPosition.j)
