@@ -33,7 +33,13 @@ describe('independent NPC route simulation', () => {
     const [agent] = createNpcAgents(map, actors);
     const initial = getNpcAgentPose(agent);
     expect(initial.progress).toBe(0);
-    const moving = advanceNpcAgents([agent], agent.stepDurationMs / 2)[0];
+    let moving = agent;
+    let remaining = agent.stepDurationMs / 2;
+    while (remaining > 0) {
+      const delta = Math.min(100, remaining);
+      moving = advanceNpcAgents([moving], delta)[0];
+      remaining -= delta;
+    }
     expect(getNpcAgentPose(moving).progress).toBeCloseTo(0.5, 5);
     expect(getNpcAgentPose(moving).x).not.toBe(initial.x);
     let completed = agent;
