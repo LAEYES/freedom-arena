@@ -160,8 +160,10 @@ export default {
             (player_id,zone_id,tile_x,tile_y,revision,updated_at)
             VALUES(?,?,?,?,0,CURRENT_TIMESTAMP)
             ON CONFLICT(player_id) DO UPDATE SET
-              zone_id=excluded.zone_id,tile_x=excluded.tile_x,tile_y=excluded.tile_y,
-              revision=world_player_presence.revision+1,updated_at=CURRENT_TIMESTAMP
+              tile_x=CASE WHEN world_player_presence.zone_id=excluded.zone_id THEN world_player_presence.tile_x ELSE excluded.tile_x END,
+              tile_y=CASE WHEN world_player_presence.zone_id=excluded.zone_id THEN world_player_presence.tile_y ELSE excluded.tile_y END,
+              revision=CASE WHEN world_player_presence.zone_id=excluded.zone_id THEN world_player_presence.revision ELSE world_player_presence.revision+1 END,
+              zone_id=excluded.zone_id,updated_at=CURRENT_TIMESTAMP
             RETURNING player_id,zone_id,tile_x,tile_y,revision,updated_at`)
             .bind(body.playerId, zoneId, body.worldTile.x, body.worldTile.y)
             .first<WorldPresenceRow>();
