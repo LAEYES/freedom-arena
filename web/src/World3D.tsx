@@ -1,5 +1,6 @@
 import { useEffect, useRef, type PointerEvent, type WheelEvent, type KeyboardEvent } from 'react';
 import { cameraModeIndex, clampCameraZoom, normalizeCameraRotation, type CameraMode, type CameraState } from './camera';
+import { generateWorldChunk } from './worldgen';
 
 type Props = {
   player: { x: number; y: number };
@@ -29,8 +30,17 @@ function addCube(out:number[], x:number,z:number,w:number,h:number,d:number) {
   for(const f of faces) for(const i of f) out.push(...v[i]);
 }
 
-function addGround(out:number[]) {
-  out.push(-8,0,-8,8,0,-8,8,0,8,-8,0,-8,8,0,8,-8,0,8);
+function addTerrain(out:number[]) {
+  const chunk = generateWorldChunk(0, 0, 2046);
+  const tileSize = 0.25;
+  for (const tile of chunk.tiles) {
+    const x0 = tile.x * tileSize - 8;
+    const x1 = x0 + tileSize;
+    const z0 = tile.y * tileSize - 8;
+    const z1 = z0 + tileSize;
+    const y = tile.elevation * 0.018;
+    out.push(x0,y,z0, x1,y,z0, x1,y,z1, x0,y,z0, x1,y,z1, x0,y,z1);
+  }
 }
 
 export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1, onCameraChange }: Props) {
@@ -126,7 +136,7 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
     if(!gl.getProgramParameter(program,gl.LINK_STATUS))return;
     gl.useProgram(program);
 
-    const data:number[]=[];addGround(data);
+    const data:number[]=[];addTerrain(data);
 
     // Stylized low-poly tactical characters: torso, head and animated beacon limbs.
     const addActor=(x:number,z:number,scale:number)=>{
