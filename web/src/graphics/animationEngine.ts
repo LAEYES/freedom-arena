@@ -21,7 +21,7 @@ export function evaluateAnimation(clip:AnimationClip, requestedFrame:number):Eva
   if(frame>=right.frame)return {...sample(right),frame,pose:clip.pose};
   for(let i=1;i<keys.length;i++){if(frame<=keys[i].frame){left=keys[i-1];right=keys[i];break;}}
   const span=Math.max(Number.EPSILON,right.frame-left.frame);
-  const t=ease((frame-left.frame)/span,left.easing??'linear');
+  const t=ease((frame-left.frame)/span,right.easing??'linear');
   const a=sample(left),b=sample(right);
   const mix=(v:number,w:number)=>v+(w-v)*t;
   return {x:mix(a.x,b.x),y:mix(a.y,b.y),rotation:mix(a.rotation,b.rotation),scale:mix(a.scale,b.scale),opacity:mix(a.opacity,b.opacity),frame,pose:clip.pose};
