@@ -367,6 +367,15 @@ export function World3DCanvas({
     if (!canvas) return;
     let gl: WebGL2RenderingContext | null = null;
     let program: WebGLProgram | null = null;
+    let vegetationProgram: WebGLProgram | null = null;
+    let vegetationTemplateBuffer: WebGLBuffer | null = null;
+    let vegetationInstanceBuffer: WebGLBuffer | null = null;
+    let vegetationVertexCount = 0;
+    let vegetationInstanceCount = 0;
+    let vegetationBufferSignature = '';
+    let vegetationMatrixLocation: WebGLUniformLocation | null = null;
+    let vegetationFogColorLocation: WebGLUniformLocation | null = null;
+    let vegetationFogAmountLocation: WebGLUniformLocation | null = null;
     const terrainChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     const sceneChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let avatarBuffer: WebGLBuffer | null = null;
@@ -395,6 +404,7 @@ export function World3DCanvas({
       });
       if (!gl) throw new Error('WebGL2 indisponible sur cet appareil. Utilisez le mode Canvas 2D.');
       program = createProgram(gl);
+      vegetationProgram = createVegetationProgram(gl);
       positionLocation = gl.getAttribLocation(program, 'aPosition');
       colorLocation = gl.getAttribLocation(program, 'aColor');
       matrixLocation = gl.getUniformLocation(program, 'uViewProjection');
@@ -413,13 +423,27 @@ export function World3DCanvas({
       sceneBuffer = gl.createBuffer();
       npcBuffer = gl.createBuffer();
       weatherBuffer = gl.createBuffer();
-      if (!avatarBuffer || !sceneBuffer || !npcBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
+      vegetationTemplateBuffer = gl.createBuffer();
+      vegetationInstanceBuffer = gl.createBuffer();
+      if (!avatarBuffer || !sceneBuffer || !npcBuffer || !weatherBuffer || !vegetationTemplateBuffer || !vegetationInstanceBuffer || !vegetationProgram) throw new Error('Impossible de créer les buffers GPU.');
       gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, sceneVertices, gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, 0, gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, weatherVertices, gl.STATIC_DRAW);
+      const vegetationTemplate = buildVegetationInstanceTemplate();
+      vegetationVertexCount = vegetationTemplate.length / 6;
+      gl.bindBuffer(gl.ARRAY_BUFFER, vegetationTemplateBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vegetationTemplate, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, vegetationInstanceBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, 0, gl.DYNAMIC_DRAW);
+      vegetationMatrixLocation = gl.getUniformLocation(vegetationProgram, 'uViewProjection');
+      vegetationFogColorLocation = gl.getUniformLocation(vegetationProgram, 'uFogColor');
+      vegetationFogAmountLocation = gl.getUniformLocation(vegetationProgram, 'uFogAmount');
+      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation) {
+        throw new Error('Uniformes du programme de végétation instanciée introuvables.');
+      }
 
       gl.enable(gl.DEPTH_TEST);
       gl.depthFunc(gl.LEQUAL);
@@ -595,6 +619,67 @@ export function World3DCanvas({
         gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
+
+        const vegetationParts: Float32Array[] = [];
+        const vegetationKeys: string[] = [];
+        for (const chunk of visibleChunks) {
+          const reference = activeCameraMode === 'thirdPerson'
+            ? positionRef.current
+            : { i: 32, j: 32 };
+          const distance = Math.hypot(
+            chunk.originI + chunk.width / 2 - reference.i,
+            chunk.originJ + chunk.height / 2 - reference.j,
+          );
+          const lod = selectWorldLod(distance);
+          const instances = vegetationChunkInstances.get(chunk.key)?.[lod];
+          if (instances?.length) {
+            vegetationParts.push(instances);
+            vegetationKeys.push(chunk.key + ':' + lod);
+          }
+        }
+        const nextVegetationSignature = vegetationKeys.join('|');
+        if (nextVegetationSignature !== vegetationBufferSignature) {
+          const totalLength = vegetationParts.reduce((sum, part) => sum + part.length, 0);
+          const combined = new Float32Array(totalLength);
+          let offset = 0;
+          for (const part of vegetationParts) {
+            combined.set(part, offset);
+            offset += part.length;
+          }
+          gl.bindBuffer(gl.ARRAY_BUFFER, vegetationInstanceBuffer);
+          gl.bufferData(gl.ARRAY_BUFFER, combined, gl.DYNAMIC_DRAW);
+          vegetationInstanceCount = combined.length / 7;
+          vegetationBufferSignature = nextVegetationSignature;
+        }
+        if (vegetationInstanceCount > 0 && vegetationProgram && vegetationTemplateBuffer && vegetationInstanceBuffer) {
+          gl.useProgram(vegetationProgram);
+          gl.uniformMatrix4fv(vegetationMatrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
+          gl.uniform3fv(vegetationFogColorLocation, fog);
+          gl.uniform1f(vegetationFogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
+          gl.bindBuffer(gl.ARRAY_BUFFER, vegetationTemplateBuffer);
+          gl.enableVertexAttribArray(0);
+          gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+          gl.vertexAttribDivisor(0, 0);
+          gl.enableVertexAttribArray(1);
+          gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+          gl.vertexAttribDivisor(1, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, vegetationInstanceBuffer);
+          gl.enableVertexAttribArray(2);
+          gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 28, 0);
+          gl.vertexAttribDivisor(2, 1);
+          gl.enableVertexAttribArray(3);
+          gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 28, 12);
+          gl.vertexAttribDivisor(3, 1);
+          gl.enableVertexAttribArray(4);
+          gl.vertexAttribPointer(4, 3, gl.FLOAT, false, 28, 16);
+          gl.vertexAttribDivisor(4, 1);
+          gl.drawArraysInstanced(gl.TRIANGLES, 0, vegetationVertexCount, vegetationInstanceCount);
+          for (const attribute of [2, 3, 4]) {
+            gl.vertexAttribDivisor(attribute, 0);
+            gl.disableVertexAttribArray(attribute);
+          }
+          gl.useProgram(program);
+        }
 
         npcAgentsRef.current = advanceNpcAgents(npcAgentsRef.current, delta);
         for (const squadState of squadFormationStatesRef.current.values()) squadState.elapsedMs += Number.isFinite(delta) ? Math.max(0, Math.min(100, delta)) : 0;
@@ -1005,6 +1090,9 @@ export function World3DCanvas({
           if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
           if (npcBuffer) gl.deleteBuffer(npcBuffer);
           if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
+          if (vegetationTemplateBuffer) gl.deleteBuffer(vegetationTemplateBuffer);
+          if (vegetationInstanceBuffer) gl.deleteBuffer(vegetationInstanceBuffer);
+          if (vegetationProgram) gl.deleteProgram(vegetationProgram);
           if (program) gl.deleteProgram(program);
         }
       };
@@ -1024,10 +1112,13 @@ export function World3DCanvas({
         if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
         if (npcBuffer) gl.deleteBuffer(npcBuffer);
         if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
+        if (vegetationTemplateBuffer) gl.deleteBuffer(vegetationTemplateBuffer);
+        if (vegetationInstanceBuffer) gl.deleteBuffer(vegetationInstanceBuffer);
+        if (vegetationProgram) gl.deleteProgram(vegetationProgram);
         if (program) gl.deleteProgram(program);
       }
     };
-  }, [terrainMap, chunkManager, sceneVertices, sceneNpcs, weatherVertices]);
+  }, [terrainMap, chunkManager, sceneVertices, sceneChunkMeshes, vegetationChunkInstances, sceneNpcs, weatherVertices]);
 
   const rotate = (delta: number) => {
     setAzimuth(current => {
