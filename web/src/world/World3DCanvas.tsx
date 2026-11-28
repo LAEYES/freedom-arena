@@ -382,9 +382,9 @@ export function World3DCanvas({
         gl.drawArrays(gl.TRIANGLES, 0, avatarVertices.length / 6);
 
         if (movementPose) {
-          movement.elapsed += delta;
-          while (movement.elapsed >= 145 && movementRef.current) {
-            movement.elapsed -= 145;
+          movementPose.elapsed += delta;
+          while (movementPose.elapsed >= 145 && movementRef.current) {
+            movementPose.elapsed -= 145;
             const active = movementRef.current;
             const next = active.path[active.index];
             if (!next) {
