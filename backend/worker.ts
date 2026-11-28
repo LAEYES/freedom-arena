@@ -364,7 +364,7 @@ export default {
           if (body.cardId !== null) {
             const card = safeCards.find(item => item && item.id === body.cardId);
             if (!card) return json({ error: "card_not_owned" }, 403);
-            const declaredSlot = (card as Record<string, unknown>).slot;
+            const declaredSlot = card.slot;
             if (typeof declaredSlot === "string" && declaredSlot !== slot) return json({ error: "card_slot_incompatible" }, 422);
             if (Object.entries(loadout).some(([otherSlot, id]) => otherSlot !== slot && id === body.cardId)) {
               return json({ error: "card_already_equipped" }, 409);
