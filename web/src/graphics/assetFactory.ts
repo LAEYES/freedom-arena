@@ -1,6 +1,6 @@
 /**
- * Freedom Arena — deterministic procedural asset primitives.
- * Rendering-independent: safe to consume from Canvas2D, WebGL or an editor.
+ * Freedom Arena — deterministic, tileable procedural asset primitives.
+ * Rendering-independent: safe to consume from Canvas2D, an editor or a later WebGL renderer.
  */
 export type Biome = 'temperate' | 'arid' | 'frozen' | 'volcanic' | 'coastal';
 export type MaterialKind = 'ground' | 'water' | 'rock' | 'wall' | 'sand' | 'snow' | 'lava';
@@ -63,23 +63,68 @@ export function seededRandom(seed: number): () => number {
 export function createAsset(kind: MaterialKind, biome: Biome, seed: number, tileSize: 64 | 128 | 256 = 64): AssetDescriptor {
   return { id: `fa:${biome}:${kind}:${seed >>> 0}`, kind, biome, seed: seed >>> 0, tileSize, palette: PALETTES[biome][kind], version: 1 };
 }
+function cellRandom(seed: number, column: number, row: number): number {
+  const wrappedColumn = column === 15 ? 0 : column;
+  const wrappedRow = row === 15 ? 0 : row;
+  const mixed = (seed ^ Math.imul(wrappedColumn + 1, 0x45d9f3b) ^ Math.imul(wrappedRow + 1, 0x119de1f3)) >>> 0;
+  return seededRandom(mixed)();
+}
+/** Paints a repeatable tile. Opposite edge cells share the same pattern to reduce visible seams. */
 export function paintProceduralTile(ctx: CanvasRenderingContext2D, asset: AssetDescriptor, x: number, y: number): void {
   const { tileSize, palette, kind, seed } = asset;
-  const random = seededRandom(seed);
-  ctx.save(); ctx.fillStyle = palette.base; ctx.fillRect(x, y, tileSize, tileSize);
   const cell = Math.max(2, Math.floor(tileSize / 16));
   const count = Math.ceil(tileSize / cell);
-  for (let i = 0; i < count * count; i++) {
-    const r = random();
-    if (r < (kind === 'water' ? .20 : .28)) {
-      ctx.fillStyle = palette.shades[Math.floor(random() * 3)];
-      const px = x + (i % count) * cell, py = y + Math.floor(i / count) * cell;
-      ctx.fillRect(px, py, Math.min(cell * (kind === 'water' ? 2 : 1), x + tileSize - px), Math.min(cell, y + tileSize - py));
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = palette.base;
+  ctx.fillRect(x, y, tileSize, tileSize);
+
+  for (let row = 0; row < count; row++) {
+    for (let column = 0; column < count; column++) {
+      const roll = cellRandom(seed, column % 16, row % 16);
+      if (roll < (kind === 'water' ? .38 : kind === 'snow' ? .24 : .34)) {
+        const shadeIndex = Math.min(2, Math.floor(cellRandom(seed ^ 0x6d2b79f5, column % 16, row % 16) * 3));
+        ctx.fillStyle = palette.shades[shadeIndex];
+        const px = x + column * cell, py = y + row * cell;
+        ctx.fillRect(px, py, Math.min(cell, x + tileSize - px), Math.min(cell, y + tileSize - py));
+      }
     }
   }
-  if (kind === 'water' || kind === 'lava') {
-    ctx.strokeStyle = palette.accent; ctx.globalAlpha = .45; ctx.lineWidth = Math.max(1, tileSize / 64);
-    for (let i = 0; i < 4; i++) { const yy = y + random() * tileSize; ctx.beginPath(); ctx.moveTo(x + random() * tileSize * .3, yy); ctx.lineTo(x + random() * tileSize, yy); ctx.stroke(); }
+
+  const detailRandom = seededRandom(seed ^ 0x27d4eb2d);
+  if (kind === 'water' || kind === 'lava' || kind === 'sand') {
+    ctx.strokeStyle = palette.accent;
+    ctx.globalAlpha = kind === 'lava' ? .72 : .38;
+    ctx.lineWidth = Math.max(1, tileSize / 64);
+    for (let i = 0; i < 4; i++) {
+      const yy = y + Math.floor(detailRandom() * Math.max(1, tileSize / 4)) * 4;
+      ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + tileSize, yy); ctx.stroke();
+    }
+  } else if (kind === 'rock') {
+    ctx.fillStyle = palette.accent;
+    ctx.globalAlpha = .42;
+    for (let i = 0; i < 5; i++) {
+      const px = x + Math.floor(detailRandom() * 12) * (tileSize / 12);
+      const py = y + Math.floor(detailRandom() * 12) * (tileSize / 12);
+      ctx.fillRect(px, py, Math.max(2, tileSize / 24), Math.max(2, tileSize / 32));
+    }
+  } else if (kind === 'wall') {
+    ctx.strokeStyle = palette.accent; ctx.globalAlpha = .35; ctx.lineWidth = Math.max(1, tileSize / 64);
+    for (let row = 1; row < 4; row++) {
+      const yy = y + row * tileSize / 4;
+      ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + tileSize, yy); ctx.stroke();
+    }
+    for (let column = 1; column < 4; column++) {
+      const xx = x + column * tileSize / 4;
+      ctx.beginPath(); ctx.moveTo(xx, y); ctx.lineTo(xx, y + tileSize); ctx.stroke();
+    }
+  } else if (kind === 'ground' || kind === 'snow') {
+    ctx.fillStyle = palette.accent; ctx.globalAlpha = .48;
+    for (let i = 0; i < 7; i++) {
+      const px = x + Math.floor(detailRandom() * 14) * (tileSize / 14);
+      const py = y + Math.floor(detailRandom() * 14) * (tileSize / 14);
+      ctx.fillRect(px, py, Math.max(1, tileSize / 64), Math.max(2, tileSize / 24));
+    }
   }
   ctx.restore();
 }
