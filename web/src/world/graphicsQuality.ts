@@ -1,5 +1,3 @@
-import type { WorldLodLevel } from './worldLod';
-
 export type GraphicsQuality = 'performance' | 'balanced' | 'quality';
 
 /** GPU render-target scale with conservative frame-time safeguards. */
