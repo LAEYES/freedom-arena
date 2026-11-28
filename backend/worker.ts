@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { buildPlayerCombatant, resolveCombatEncounter, type StoredCard } from './combatEngine';
+import { buildEquippedCombatant, buildPlayerCombatant, normalizeEquipment, resolveCombatEncounter, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -158,7 +158,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
@@ -283,10 +283,10 @@ export default {
           if (prior) return json({ outcome: parseObject(prior.outcome_json), replayed: true });
 
           const player = await env.DB.prepare(
-            "SELECT level,xp,victories,world_resources,world_threat,cards,equipped_card_id,current_hp,status_effects FROM players WHERE id=?"
+            "SELECT level,xp,victories,world_resources,world_threat,cards,equipped_card_id,current_hp,status_effects,equipment_json,equipment_revision FROM players WHERE id=?"
           ).bind(identity.subject).first<{
             level: number; xp: number; victories: number; world_resources: number; world_threat: number;
-            cards: string; equipped_card_id: string | null; current_hp: number | null; status_effects: string;
+            cards: string; equipped_card_id: string | null; current_hp: number | null; status_effects: string; equipment_json: string; equipment_revision: number;
           }>();
           if (!player) return json({ error: "player_not_initialized" }, 409);
 
@@ -303,8 +303,9 @@ export default {
           const randomBytes = new Uint32Array(40);
           crypto.getRandomValues(randomBytes);
           const rolls = Array.from(randomBytes, value => value / 4294967296);
+          const loadout = normalizeEquipment(parseJson(player.equipment_json, {}), safeCards, player.equipped_card_id);
           const outcome = resolveCombatEncounter(
-            player.level, player.world_threat, safeCards, player.equipped_card_id, rolls, player.current_hp, parseJson(player.status_effects, []),
+            player.level, player.world_threat, safeCards, loadout.weapon ?? player.equipped_card_id, rolls, player.current_hp, parseJson(player.status_effects, []), loadout,
           );
           const nextXp = player.xp + outcome.xpAwarded;
           const nextLevel = 1 + Math.floor(nextXp / 100);
@@ -340,14 +341,15 @@ export default {
         try {
           const prior = await env.DB.prepare("SELECT hp_restored,resources_spent FROM world_rest_log WHERE command_id=? AND player_id=?").bind(body.commandId, identity.subject).first<{ hp_restored: number; resources_spent: number }>();
           if (prior) return json({ restored: prior.hp_restored, resourcesSpent: prior.resources_spent, replayed: true });
-          const player = await env.DB.prepare("SELECT level,world_resources,cards,equipped_card_id,current_hp FROM players WHERE id=?").bind(identity.subject).first<{ level: number; world_resources: number; cards: string; equipped_card_id: string | null; current_hp: number | null }>();
+          const player = await env.DB.prepare("SELECT level,world_resources,cards,equipped_card_id,current_hp,equipment_json FROM players WHERE id=?").bind(identity.subject).first<{ level: number; world_resources: number; cards: string; equipped_card_id: string | null; current_hp: number | null; equipment_json: string }>();
           if (!player) return json({ error: "player_not_initialized" }, 409);
           const present = await env.DB.prepare("SELECT 1 AS present FROM world_player_presence WHERE player_id=? AND zone_id=?").bind(identity.subject, zoneId).first<{ present: number }>();
           if (!present) return json({ error: "player_not_in_zone" }, 403);
           if (player.world_resources < 1) return json({ error: "insufficient_world_resources" }, 409);
           const cards = parseJson<StoredCard[]>(player.cards, []);
-          const equipped = Array.isArray(cards) ? cards.find(card => card && card.id === player.equipped_card_id) ?? null : null;
-          const maximum = buildPlayerCombatant(player.level, equipped).maxHp;
+          const safeCards = Array.isArray(cards) ? cards.slice(0, 500) : [];
+          const loadout = normalizeEquipment(parseJson(player.equipment_json, {}), safeCards, player.equipped_card_id);
+          const maximum = buildEquippedCombatant(player.level, safeCards, loadout).maxHp;
           const current = player.current_hp === null ? maximum : Math.max(0, Math.min(maximum, player.current_hp));
           const restored = maximum - current;
           if (restored <= 0) return json({ error: "health_already_full" }, 409);
