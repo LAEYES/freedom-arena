@@ -62,11 +62,11 @@ describe('multi-squad tactical coordination', () => {
   });
 
   it('allocates unique reachable staging cells across independent squads', () => {
-    const squads = [
-      { id: 'squad-b', members: [{ id: 'npc-c', position: { i: 20, j: 24 } }, { id: 'npc-d', position: { i: 24, j: 20 } }] },
+    const arena = generateTerrainMap({ width: 48, height: 48, seed: 91, spawnI: 24, spawnJ: 24, spawnSafeRadius: 20 });
+    const squads = [, members: [{ id: 'npc-c', position: { i: 20, j: 24 } }, { id: 'npc-d', position: { i: 24, j: 20 } }] },
       { id: 'squad-a', members: [{ id: 'npc-a', position: { i: 28, j: 24 } }, { id: 'npc-b', position: { i: 24, j: 28 } }] },
     ];
-    const plans = planMultiSquadInterceptions(map, { i: 24, j: 24 }, squads, new Set(), 3);
+    const plans = planMultiSquadInterceptions(arena, { i: 24, j: 24 }, squads, new Set(), 3);
     expect(plans).toHaveLength(4);
     expect(new Set(plans.map(plan => tileKey(plan.slot.i, plan.slot.j))).size).toBe(4);
     expect(plans.map(plan => plan.memberId)).toEqual(['npc-a', 'npc-b', 'npc-c', 'npc-d']);
