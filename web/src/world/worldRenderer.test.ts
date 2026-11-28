@@ -9,6 +9,8 @@ import {
   buildEventBeaconMesh,
   buildBossMesh,
   buildWeatherParticleMesh,
+  buildVegetationMesh,
+  buildWorldDressingMesh,
   pickNearestTerrainTile,
   TERRAIN_PALETTE,
   terrainWorldHeight,
@@ -123,6 +125,36 @@ describe('WebGL world mesh and picking', () => {
     expect(first.length).toBe(12 * 36 * 6);
     expect(Array.from(first)).toEqual(Array.from(second));
     expect(first.every(Number.isFinite)).toBe(true);
+  });
+
+  it('builds deterministic low-poly vegetation variants with finite geometry', () => {
+    for (const variant of ['broadleaf', 'conifer', 'shrub'] as const) {
+      const first = buildVegetationMesh(grass, variant, 20261128);
+      const second = buildVegetationMesh(grass, variant, 20261128);
+      expect(first.length).toBeGreaterThan(0);
+      expect(Array.from(first)).toEqual(Array.from(second));
+      expect(first.every(Number.isFinite)).toBe(true);
+      expect(first.length % 6).toBe(0);
+    }
+  });
+
+  it('builds deterministic biome-aware dressing and excludes water tiles', () => {
+    const forestTiles = Array.from({ length: 256 }, (_, index) => ({
+      ...grass,
+      i: index % 64,
+      j: Math.floor(index / 64),
+      kind: 'forest' as const,
+    }));
+    const first = buildWorldDressingMesh(forestTiles, 91);
+    const second = buildWorldDressingMesh(forestTiles, 91);
+    const waterOnly = buildWorldDressingMesh(
+      [{ ...grass, kind: 'water', walkable: false, movementCost: Infinity }],
+      91,
+    );
+    expect(first.length).toBeGreaterThan(0);
+    expect(Array.from(first)).toEqual(Array.from(second));
+    expect(first.every(Number.isFinite)).toBe(true);
+    expect(waterOnly.length).toBe(0);
   });
 
   it('picks the nearest projected terrain tile', () => {
