@@ -147,3 +147,111 @@ export function pickNearestTerrainTile(
   }
   return nearest;
 }
+
+
+export type WorldActorVisual = {
+  id: string;
+  x: number;
+  y: number;
+  faction: 'Aegis' | 'Nomads' | 'Eclipse' | 'Neutral';
+  role?: 'guard' | 'scout' | 'mystic';
+  activity?: string;
+};
+
+const FACTION_COLORS: Record<WorldActorVisual['faction'], RGB> = {
+  Aegis: [0.25, 0.68, 0.96],
+  Nomads: [0.88, 0.62, 0.27],
+  Eclipse: [0.67, 0.40, 0.92],
+  Neutral: [0.70, 0.76, 0.82],
+};
+
+/** Build a compact humanoid faction NPC with faction-coded armor. */
+export function buildNpcMesh(actor: WorldActorVisual, groundTile: TerrainTile): Float32Array {
+  const output: number[] = [];
+  const x = actor.x + 0.5;
+  const y = actor.y + 0.5;
+  const z = terrainWorldHeight(groundTile) + 0.015;
+  const armor = FACTION_COLORS[actor.faction];
+  const cloth: RGB = actor.role === 'mystic' ? [0.24, 0.16, 0.42] : [0.15, 0.20, 0.28];
+  pushBox(output, { x, y, z: z + 0.52 }, { width: 0.28, depth: 0.24, height: 0.43 }, armor);
+  pushBox(output, { x, y, z: z + 0.88 }, { width: 0.23, depth: 0.23, height: 0.22 }, [0.82, 0.68, 0.53]);
+  pushBox(output, { x: x - 0.19, y, z: z + 0.52 }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
+  pushBox(output, { x: x + 0.19, y, z: z + 0.52 }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
+  pushBox(output, { x: x - 0.085, y, z: z + 0.18 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
+  pushBox(output, { x: x + 0.085, y, z: z + 0.18 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
+  return new Float32Array(output);
+}
+
+/** Low-poly POI structure: platform, walls and a roof/canopy. */
+export function buildPoiBuildingMesh(tile: TerrainTile, variant = 0): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.5;
+  const y = tile.j + 0.5;
+  const z = terrainWorldHeight(tile) + 0.02;
+  const wall: RGB = variant % 2 === 0 ? [0.42, 0.48, 0.56] : [0.48, 0.38, 0.27];
+  const roof: RGB = variant % 2 === 0 ? [0.24, 0.36, 0.54] : [0.58, 0.30, 0.20];
+  pushBox(output, { x, y, z: z + 0.08 }, { width: 1.25, depth: 1.05, height: 0.16 }, [0.30, 0.34, 0.39]);
+  pushBox(output, { x, y, z: z + 0.48 }, { width: 0.88, depth: 0.78, height: 0.68 }, wall);
+  pushBox(output, { x, y, z: z + 0.91 }, { width: 1.08, depth: 0.94, height: 0.16 }, roof);
+  pushBox(output, { x: x + 0.23, y: y - 0.40, z: z + 0.62 }, { width: 0.12, depth: 0.10, height: 0.35 }, [0.80, 0.69, 0.43]);
+  return new Float32Array(output);
+}
+
+/** Visible event marker; high-intensity events receive a larger beacon. */
+export function buildEventBeaconMesh(tile: TerrainTile, intensity: number): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.5;
+  const y = tile.j + 0.5;
+  const z = terrainWorldHeight(tile) + 0.04;
+  const scale = intensity >= 4 ? 1.35 : 1;
+  const color: RGB = intensity >= 4 ? [0.98, 0.24, 0.20] : [0.96, 0.67, 0.22];
+  pushBox(output, { x, y, z: z + 0.10 }, { width: 0.72, depth: 0.72, height: 0.16 }, shade(color, 0.55));
+  pushBox(output, { x, y, z: z + 0.52 * scale }, { width: 0.22 * scale, depth: 0.22 * scale, height: 0.72 * scale }, color);
+  pushBox(output, { x, y, z: z + 0.96 * scale }, { width: 0.42 * scale, depth: 0.42 * scale, height: 0.14 }, [1, 0.86, 0.48]);
+  return new Float32Array(output);
+}
+
+/** Boss marker uses a larger dark sentinel silhouette and a red crest. */
+export function buildBossMesh(tile: TerrainTile): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.5;
+  const y = tile.j + 0.5;
+  const z = terrainWorldHeight(tile) + 0.02;
+  const armor: RGB = [0.28, 0.12, 0.19];
+  pushBox(output, { x, y, z: z + 0.82 }, { width: 0.66, depth: 0.52, height: 0.88 }, armor);
+  pushBox(output, { x, y, z: z + 1.47 }, { width: 0.44, depth: 0.42, height: 0.38 }, [0.55, 0.18, 0.20]);
+  pushBox(output, { x: x - 0.43, y, z: z + 0.82 }, { width: 0.20, depth: 0.22, height: 0.76 }, [0.42, 0.18, 0.24]);
+  pushBox(output, { x: x + 0.43, y, z: z + 0.82 }, { width: 0.20, depth: 0.22, height: 0.76 }, [0.42, 0.18, 0.24]);
+  pushBox(output, { x: x - 0.19, y, z: z + 0.25 }, { width: 0.20, depth: 0.24, height: 0.48 }, [0.16, 0.16, 0.22]);
+  pushBox(output, { x: x + 0.19, y, z: z + 0.25 }, { width: 0.20, depth: 0.24, height: 0.48 }, [0.16, 0.16, 0.22]);
+  pushBox(output, { x, y: y - 0.03, z: z + 1.78 }, { width: 0.18, depth: 0.18, height: 0.48 }, [0.96, 0.18, 0.16]);
+  return new Float32Array(output);
+}
+
+/** Deterministic weather particles; callers animate their offset over time. */
+export function buildWeatherParticleMesh(
+  seed: number,
+  kind: 'mist' | 'storm' | 'frost',
+  count = 72,
+): Float32Array {
+  const output: number[] = [];
+  let state = seed >>> 0;
+  const random = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  const color: RGB = kind === 'storm' ? [0.36, 0.56, 0.78]
+    : kind === 'frost' ? [0.76, 0.87, 0.98] : [0.52, 0.68, 0.78];
+  for (let index = 0; index < count; index++) {
+    const x = random() * 64;
+    const y = random() * 64;
+    const z = 1.5 + random() * 4;
+    const size = kind === 'storm' ? 0.035 : kind === 'frost' ? 0.075 : 0.12;
+    pushBox(output, { x, y, z }, {
+      width: kind === 'storm' ? size : size * 1.2,
+      depth: kind === 'storm' ? size * 3.8 : size * 1.2,
+      height: kind === 'storm' ? size * 0.55 : size * 1.2,
+    }, color);
+  }
+  return new Float32Array(output);
+}
