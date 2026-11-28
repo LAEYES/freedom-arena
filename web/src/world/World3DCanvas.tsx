@@ -852,7 +852,8 @@ export function World3DCanvas({
       disposed = true;
       window.cancelAnimationFrame(frameId);
       if (gl) {
-        if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
+        for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
+        terrainChunkBuffers.clear();
         if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
         if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
         if (npcBuffer) gl.deleteBuffer(npcBuffer);
