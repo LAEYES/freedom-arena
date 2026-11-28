@@ -5,6 +5,7 @@ import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
 import { canNpcPerceivePlayer } from './npcPerception';
+import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -398,8 +399,42 @@ export function World3DCanvas({
                 : patrolPoses[otherIndex];
               if (otherPose) blockedTiles.add(tileKey(Math.round(otherPose.x), Math.round(otherPose.y)));
             }
+            const previousBehaviorState = behaviorAgent.state;
             behaviorAgent = updateNpcBehavior(terrainMap, behaviorAgent, playerTile, delta, { blockedTiles });
             npcBehaviorAgentsRef.current[index] = behaviorAgent;
+            if (previousBehaviorState !== 'ALERT' && behaviorAgent.state === 'ALERT') {
+              const sourceTile = behaviorAgent.position;
+              const candidates = sceneNpcs.map((candidate, candidateIndex) => {
+                const active = npcBehaviorAgentsRef.current[candidateIndex];
+                const patrol = patrolPoses[candidateIndex];
+                return {
+                  id: candidate.id,
+                  position: active?.position ?? {
+                    i: Math.round(patrol?.x ?? candidate.x),
+                    j: Math.round(patrol?.y ?? candidate.y),
+                  },
+                };
+              });
+              const recipients = new Set(resolveNpcAlertRecipients(
+                terrainMap, { id: actor.id, position: sourceTile, radius: 6 }, candidates,
+              ));
+              for (let recipientIndex = 0; recipientIndex < sceneNpcs.length; recipientIndex++) {
+                if (recipientIndex === index || !recipients.has(sceneNpcs[recipientIndex].id)) continue;
+                const recipientActor = sceneNpcs[recipientIndex];
+                const recipientPatrol = patrolPoses[recipientIndex];
+                const recipientTile = {
+                  i: Math.round(recipientPatrol?.x ?? recipientActor.x),
+                  j: Math.round(recipientPatrol?.y ?? recipientActor.y),
+                };
+                const recipientAgent = npcBehaviorAgentsRef.current[recipientIndex]
+                  ?? {
+                    ...createNpcBehaviorAgent(recipientActor.id, { i: recipientActor.x, j: recipientActor.y }),
+                    position: recipientTile,
+                    previousPosition: recipientTile,
+                  };
+                npcBehaviorAgentsRef.current[recipientIndex] = receiveNpcAlertSignal(recipientAgent, sourceTile);
+              }
+            }
             pose = getNpcBehaviorPose(behaviorAgent);
             const fromTile = getTerrainTile(terrainMap, behaviorAgent.position.i, behaviorAgent.position.j);
             const toTile = getTerrainTile(terrainMap, behaviorAgent.path[behaviorAgent.pathIndex + 1]?.i ?? behaviorAgent.position.i,
