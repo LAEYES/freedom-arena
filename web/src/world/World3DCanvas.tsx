@@ -1085,7 +1085,9 @@ export function World3DCanvas({
         canvas.removeEventListener('keydown', onKeyDown);
         if (gl) {
           for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
-      terrainChunkBuffers.clear();
+          terrainChunkBuffers.clear();
+          for (const entry of sceneChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
+          sceneChunkBuffers.clear();
           if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
           if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
           if (npcBuffer) gl.deleteBuffer(npcBuffer);
