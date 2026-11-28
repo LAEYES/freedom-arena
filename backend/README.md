@@ -152,3 +152,24 @@ npx wrangler d1 execute freedom-arena --remote --file=./migrations/006_fa_world_
 Fresh databases include `players.status_effects`. Card records may optionally define a bounded `ability` object (`effect`: `burn`, `poison`, `weaken`, `expose`, `shield` or `regeneration`; `potency` is clamped server-side) and a `resistances` array containing supported status identifiers (`burn`, `poison`, `weaken`). The Worker continues to load all card data from the authenticated player's D1 row; clients cannot supply ability parameters or combat rolls to the command endpoint. Burn/poison deal damage over subsequent rounds, weaken reduces enemy attack, expose amplifies the next hit, shield absorbs damage, and regeneration restores health. Enemy heavy attacks can inflict a short burn; equipped-card resistance prevents it. Player status effects are normalized, capped in count/duration/potency and persisted with the combat result. A successful rest clears active negative statuses.
 
 Combat test coverage includes card abilities, resistance and bounded status persistence. Apply migration 006 before deploying this Worker revision. No migration or deployment is executed by this PR.
+
+
+## FA-WORLD-040 multi-slot equipment
+
+For existing D1 databases, apply migration 007 after migrations 002–006:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/007_fa_world_040_equipment.sql
+```
+
+The player loadout contains four slots: `weapon`, `armor`, `accessory1` and `accessory2`. Each slot references a card already present in the authenticated player's stored inventory. A card cannot occupy two slots simultaneously. If a card declares a `slot`, the server enforces that compatibility; cards without a declared slot remain backward-compatible. Existing `equipped_card_id` values are interpreted as the weapon slot until the new loadout is saved.
+
+Authenticated clients equip or unequip with `POST /world/:zoneId/equip`:
+
+```json
+{ "commandId": "equip-command-id-000001", "slot": "armor", "cardId": "card-armor-01", "expectedRevision": 0 }
+```
+
+Set `cardId` to `null` to unequip. The server checks ownership, zone presence, slot compatibility, duplicate use and the expected loadout revision. D1 stores the loadout update and idempotency record in one batch. A stale revision returns HTTP 409; clients should reload the loadout and retry with a new command ID. The command never accepts client-supplied stats.
+
+Combat aggregates bounded power, defense and vitality from all equipped cards; the weapon card supplies the active card ability and resistances. Health maximum and recovery use the same aggregate stat builder. Apply migration 007 before deploying this Worker. No remote migration, deployment or merge is performed by this PR.
