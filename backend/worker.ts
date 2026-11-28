@@ -302,10 +302,10 @@ export default {
         const confirmed=await env.DB.prepare("SELECT status,turn_number,winner_id FROM pvp_matches WHERE match_id=?").bind(matchId).first<{status:string;turn_number:number;winner_id:string|null}>();
         const committed=await env.DB.prepare("SELECT command_id FROM pvp_turns WHERE command_id=?").bind(command).first();
         if (!committed) return json({error:"turn_conflict_retry_state"},409);
-        if (confirmed?.status==="completed" && confirmed.winner_id) {
+        if (confirmed?.status==="completed") {
           const fresh=await env.DB.prepare("SELECT rating_a,rating_b,player_a,player_b FROM pvp_matches WHERE match_id=?").bind(matchId).first<{rating_a:number;rating_b:number;player_a:string;player_b:string}>();
           if (fresh) {
-            const scoreA=confirmed.winner_id===fresh.player_a?1:0;
+            const scoreA=confirmed.winner_id===null?0.5:(confirmed.winner_id===fresh.player_a?1:0);
             const elo=calculateElo(fresh.rating_a,fresh.rating_b,scoreA);
             await env.DB.batch([
               env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,fresh.player_a,fresh.player_b,fresh.rating_a,fresh.rating_b,elo.ratingA,elo.ratingB),
