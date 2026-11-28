@@ -165,14 +165,13 @@ export function World3DCanvas({
 
   const zone = getZone(zoneId);
   const environment = getZoneEnvironment(zone, worldThreat, worldResources, explorationCount);
+  const sceneNpcs = useMemo(
+    () => getZoneNpcs(zone, worldThreat, worldResources, explorationCount),
+    [zoneId, worldThreat, worldResources, explorationCount],
+  );
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
-    const actors = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
-    for (const actor of actors) {
-      const tile = getTerrainTile(terrainMap, actor.x, actor.y);
-      if (tile?.walkable) append(buildNpcMesh(actor, tile));
-    }
     zone.pointsOfInterest.forEach((_, index) => {
       const position = getPoiPosition(zone, index);
       const tile = getTerrainTile(terrainMap, position.x, position.y);
@@ -188,7 +187,7 @@ export function World3DCanvas({
       }
     }
     return new Float32Array(output);
-  }, [terrainMap, zoneId, worldThreat, worldResources, explorationCount, worldEvent.id, worldEvent.intensity]);
+  }, [terrainMap, zoneId, worldEvent.id, worldEvent.intensity]);
   const weatherVertices = useMemo(() => {
     if (environment.weather === 'clear') return new Float32Array();
     return buildWeatherParticleMesh(zoneSeed(zoneId) + explorationCount * 7919,
@@ -217,6 +216,7 @@ export function World3DCanvas({
     let terrainBuffer: WebGLBuffer | null = null;
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
+    let npcBuffer: WebGLBuffer | null = null;
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
@@ -258,10 +258,13 @@ export function World3DCanvas({
       terrainBuffer = gl.createBuffer();
       avatarBuffer = gl.createBuffer();
       sceneBuffer = gl.createBuffer();
+      npcBuffer = gl.createBuffer();
       weatherBuffer = gl.createBuffer();
-      if (!terrainBuffer || !avatarBuffer || !sceneBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
+      if (!terrainBuffer || !avatarBuffer || !sceneBuffer || !npcBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
       gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, sceneVertices, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, 0, gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, weatherVertices, gl.STATIC_DRAW);
 
@@ -276,7 +279,7 @@ export function World3DCanvas({
         ...current,
         chunks: initialChunks.length,
         tileCount: terrainTiles.length,
-        actors: getZoneNpcs(zone, worldThreat, worldResources, explorationCount).length,
+        actors: sceneNpcs.length,
         pois: zone.pointsOfInterest.length,
         weather: environment.weather,
         cycle: environment.cycle,
@@ -346,6 +349,21 @@ export function World3DCanvas({
         gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
+
+        const npcOutput: number[] = [];
+        for (let index = 0; index < sceneNpcs.length; index++) {
+          const actor = sceneNpcs[index];
+          const tile = getTerrainTile(terrainMap, actor.x, actor.y);
+          if (!tile?.walkable) continue;
+          const activityAmount = actor.activity === 'patrol' ? 0.72 : actor.activity === 'defend' ? 0.42 : 0.24;
+          const phase = time * (actor.activity === 'patrol' ? 0.0048 : 0.0022) + npcAnimationPhase(actor.id);
+          const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount });
+          for (const value of mesh) npcOutput.push(value);
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(npcOutput), gl.DYNAMIC_DRAW);
+        bindVertexLayout();
+        gl.drawArrays(gl.TRIANGLES, 0, npcOutput.length / 6);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
         gl.uniform1f(weatherMotionLocation, 1);
@@ -494,6 +512,7 @@ export function World3DCanvas({
           if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
           if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
           if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
+          if (npcBuffer) gl.deleteBuffer(npcBuffer);
           if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
           if (program) gl.deleteProgram(program);
         }
@@ -509,11 +528,12 @@ export function World3DCanvas({
         if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
         if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
         if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
+        if (npcBuffer) gl.deleteBuffer(npcBuffer);
         if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
         if (program) gl.deleteProgram(program);
       }
     };
-  }, [terrainMap, chunkManager, sceneVertices, weatherVertices]);
+  }, [terrainMap, chunkManager, sceneVertices, sceneNpcs, weatherVertices]);
 
   const rotate = (delta: number) => {
     setAzimuth(current => {
