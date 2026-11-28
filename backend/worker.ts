@@ -266,6 +266,20 @@ export default {
         }
         const turnNumber=Number(match.turn_number??0), actor=turnNumber%2===0?String(match.player_a):String(match.player_b);
         if (actor!==playerId) return json({error:"not_your_turn",expectedTurn:turnNumber+1},409);
+        if (typeof match.turn_deadline==="string" && Date.parse(match.turn_deadline.replace(" ","T")+"Z") < Date.now()) {
+          const winner=actor===match.player_a?String(match.player_b):String(match.player_a);
+          const settled=await env.DB.prepare("UPDATE pvp_matches SET status='completed',winner_id=?,updated_at=CURRENT_TIMESTAMP,settled_at=CURRENT_TIMESTAMP WHERE match_id=? AND status IN ('ready','active') AND turn_number=? AND turn_deadline < CURRENT_TIMESTAMP").bind(winner,matchId,turnNumber).run();
+          if (Number(settled.meta.changes??0)===1) {
+            const elo=calculateElo(Number(match.rating_a),Number(match.rating_b),winner===match.player_a?1:0);
+            await env.DB.batch([
+              env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,match.player_a,match.player_b,match.rating_a,match.rating_b,elo.ratingA,elo.ratingB),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingA,match.player_a),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingB,match.player_b),
+              env.DB.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
+            ]);
+          }
+          return json({matchId,status:"completed",winnerId:winner,forfeit:true,reason:"turn_timeout"});
+        }
         const mine=actor===match.player_a?"a":"b",target=mine==="a"?"b":"a";
         const me=state[mine],foe=state[target];
         let damage=0;
@@ -296,7 +310,8 @@ export default {
             await env.DB.batch([
               env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,fresh.player_a,fresh.player_b,fresh.rating_a,fresh.rating_b,elo.ratingA,elo.ratingB),
               env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND EXISTS(SELECT 1 FROM pvp_rating_log WHERE match_id=?)").bind(elo.ratingA,fresh.player_a,matchId),
-              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND EXISTS(SELECT 1 FROM pvp_rating_log WHERE match_id=?)").bind(elo.ratingB,fresh.player_b,matchId)
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND EXISTS(SELECT 1 FROM pvp_rating_log WHERE match_id=?)").bind(elo.ratingB,fresh.player_b,matchId),
+              env.DB.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
             ]);
           }
         }
