@@ -425,14 +425,15 @@ export function World3DCanvas({
               for (let memberIndex = 0; memberIndex < sceneNpcs.length; memberIndex++) {
                 const member = sceneNpcs[memberIndex];
                 if (!currentSquad.memberIds.includes(member.id)) continue;
-                const memberAgent = memberIndex === index ? behaviorAgent : npcBehaviorAgentsRef.current[memberIndex];
+                const memberAgent: NpcBehaviorAgent | null = memberIndex === index ? behaviorAgent : npcBehaviorAgentsRef.current[memberIndex];
                 if (!memberAgent || (memberAgent.state !== 'CHASE' && memberAgent.state !== 'RETURN')) continue;
-                const regrouped = prepareNpcSquadRegroup(memberAgent);
-                npcBehaviorAgentsRef.current[memberIndex] = regrouped;
-                if (memberIndex === index) behaviorAgent = regrouped;
+                const regroupedAgent: NpcBehaviorAgent = prepareNpcSquadRegroup(memberAgent);
+                npcBehaviorAgentsRef.current[memberIndex] = regroupedAgent;
+                if (memberIndex === index) behaviorAgent = regroupedAgent;
                 npcFormationMotionsRef.current.delete(member.id);
               }
             }
+            if (!behaviorAgent) continue;
             npcBehaviorAgentsRef.current[index] = behaviorAgent;
             if (previousBehaviorState !== 'ALERT' && behaviorAgent.state === 'ALERT') {
               const sourceTile = behaviorAgent.position;
