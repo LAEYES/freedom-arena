@@ -8,7 +8,7 @@ import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { assignNpcDynamicRoles, getNpcTacticalProfile } from './npcTactics';
 import { planNpcDirectionalCoverRoute } from './npcCover';
-import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
+import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, resolveNpcSquadLeaderHandoff, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
@@ -522,13 +522,14 @@ export function World3DCanvas({
                 return [{ id: memberId, position: active.position, state: active.state }];
               });
               const electedLeader = electNpcSquadLeader(activeSquad);
-              if (electedLeader && electedLeader.id !== squadState.leaderId) {
+              const handoff = resolveNpcSquadLeaderHandoff(squadState.leaderId, activeSquad);
+              if (handoff) {
                 squadFormationStatesRef.current.delete(squadState.leaderId);
-                squadState.leaderId = electedLeader.id;
-                squadState.anchor = { i: electedLeader.position.i, j: electedLeader.position.j };
+                squadState.leaderId = handoff.id;
+                squadState.anchor = { i: handoff.position.i, j: handoff.position.j };
                 squadState.elapsedMs = 0;
-                squadFormationStatesRef.current.set(electedLeader.id, squadState);
-                for (const memberId of squadState.memberIds) npcSquadMembershipRef.current.set(memberId, electedLeader.id);
+                squadFormationStatesRef.current.set(handoff.id, squadState);
+                for (const memberId of squadState.memberIds) npcSquadMembershipRef.current.set(memberId, handoff.id);
               }
               if (electedLeader?.id === actor.id && squadState.leaderId === actor.id
                 && shouldRefreshNpcFormation(squadState.anchor, behaviorAgent.position, squadState.elapsedMs, { displacementTiles: 2, cooldownMs: 900 })) {
