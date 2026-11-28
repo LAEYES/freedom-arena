@@ -35,6 +35,8 @@ function addGround(out:number[]) {
 
 export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1, onCameraChange }: Props) {
   const ref=useRef<HTMLCanvasElement>(null);
+  const renderStateRef=useRef({player,threat,weather,cycle,cameraMode,cameraRotation,zoom});
+  renderStateRef.current={player,threat,weather,cycle,cameraMode,cameraRotation,zoom};
   const pointerRef=useRef<{id:number;x:number}|null>(null);
   const onPointerDown=(event:PointerEvent<HTMLCanvasElement>)=>{pointerRef.current={id:event.pointerId,x:event.clientX};event.currentTarget.setPointerCapture(event.pointerId);};
   const onPointerMove=(event:React.PointerEvent<HTMLCanvasElement>)=>{const pointer=pointerRef.current;if(!pointer||pointer.id!==event.pointerId)return;const delta=event.clientX-pointer.x;pointer.x=event.clientX;if(Math.abs(delta)>0)onCameraChange?.({rotation:cameraRotation+delta*0.008});};
@@ -175,6 +177,7 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
     let raf=0;
     let lastWidth=0,lastHeight=0;
     const draw=(time:number)=>{
+      const current=renderStateRef.current;
       const r=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
       const width=Math.max(1,Math.floor(r.width*dpr));
       const height=Math.max(1,Math.floor(r.height*dpr));
@@ -186,20 +189,20 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
       gl.clearColor(.01,.02,.05,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       const aspect=canvas.width/Math.max(1,canvas.height);
       const s=0.105/Math.max(.7,aspect);
-      const boundedZoom=clampCameraZoom(zoom);
+      const boundedZoom=clampCameraZoom(current.zoom);
       // Orthographic projection after camera-space rotation and elevation in the vertex shader.
       const matrix=new Float32Array([
         s,0,0,0, 0,s*1.35,0,0, 0,0,s,0,
         0,-0.16,0,1
       ]);
       gl.uniformMatrix4fv(matrixLoc,false,matrix);
-      gl.uniform1f(timeLoc,time/1000);gl.uniform1f(pxLoc,player.x%12);gl.uniform1f(pyLoc,player.y%12);
-      gl.uniform1f(cameraRotationLoc,normalizeCameraRotation(cameraRotation));
+      gl.uniform1f(timeLoc,time/1000);gl.uniform1f(pxLoc,current.player.x%12);gl.uniform1f(pyLoc,current.player.y%12);
+      gl.uniform1f(cameraRotationLoc,normalizeCameraRotation(current.cameraRotation));
       gl.uniform1f(cameraZoomLoc,boundedZoom);
-      gl.uniform1f(cameraModeLoc,cameraModeIndex(cameraMode));
-      gl.uniform1f(threatLoc,threat);
-      gl.uniform1f(weatherLoc,weather==='storm'?1:weather==='mist'?.5:weather==='frost'?.25:0);
-      gl.uniform1f(cycleLoc,cycle==='night'?1:cycle==='dusk'?.6:cycle==='dawn'?.3:0);
+      gl.uniform1f(cameraModeLoc,cameraModeIndex(current.cameraMode));
+      gl.uniform1f(threatLoc,current.threat);
+      gl.uniform1f(weatherLoc,current.weather==='storm'?1:current.weather==='mist'?.5:current.weather==='frost'?.25:0);
+      gl.uniform1f(cycleLoc,current.cycle==='night'?1:current.cycle==='dusk'?.6:current.cycle==='dawn'?.3:0);
       // Additive pulse makes beacons readable without expensive particle systems.
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
@@ -208,7 +211,7 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
     };
     raf=requestAnimationFrame(draw);
     return()=>{cancelAnimationFrame(raf);gl.deleteBuffer(buffer);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs)};
-  },[enabled,player.x,player.y,threat,weather,cycle,cameraMode,cameraRotation,zoom]);
+  },[enabled]);
 
   return <canvas ref={ref} className="world-3d-canvas" aria-label="3D tactical world" tabIndex={0} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel} onKeyDown={onKeyDown}/>;
 }
