@@ -7,6 +7,7 @@ import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type Npc
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { getNpcTacticalProfile } from './npcTactics';
+import { electNpcSquadLeader } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
@@ -447,27 +448,33 @@ export function World3DCanvas({
                   };
                 npcBehaviorAgentsRef.current[recipientIndex] = receiveNpcAlertSignal(recipientAgent, sourceTile);
               }
+              const squadCandidates = sceneNpcs.flatMap((member, memberIndex) => {
+                const active = npcBehaviorAgentsRef.current[memberIndex];
+                if (!active || active.state !== 'ALERT') return [];
+                return [{ id: member.id, position: active.position, state: active.state }];
+              });
+              const squadLeader = electNpcSquadLeader(squadCandidates);
+              const leaderIndex = squadLeader
+                ? sceneNpcs.findIndex(member => member.id === squadLeader.id)
+                : index;
+              const leaderAgent = npcBehaviorAgentsRef.current[leaderIndex] ?? behaviorAgent;
+              const leaderTile = squadLeader?.position ?? sourceTile;
               const groupMembers = sceneNpcs
                 .map((member, memberIndex) => {
-                  if (memberIndex === index) return null;
+                  if (memberIndex === leaderIndex) return null;
                   const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
                   if (!memberAgent || memberAgent.state !== 'ALERT') return null;
-                  const memberPatrol = patrolPoses[memberIndex];
-                  const memberPosition = memberAgent?.position ?? {
-                    i: Math.round(memberPatrol?.x ?? member.x),
-                    j: Math.round(memberPatrol?.y ?? member.y),
-                  };
                   return {
                     id: member.id,
                     role: getNpcTacticalProfile(member.activity).role,
-                    position: memberPosition,
+                    position: memberAgent.position,
                   };
                 })
                 .filter((member): member is NonNullable<typeof member> => member !== null);
-              const occupied = new Set<string>([tileKey(sourceTile.i, sourceTile.j)]);
+              const occupied = new Set<string>([tileKey(leaderTile.i, leaderTile.j)]);
               for (const member of groupMembers) occupied.add(tileKey(member.position.i, member.position.j));
               const formationPlans = planNpcFormation(
-                terrainMap, sourceTile, behaviorAgent.facing, groupMembers, occupied,
+                terrainMap, leaderTile, leaderAgent.facing, groupMembers, occupied,
               );
               for (const plan of formationPlans) {
                 npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
