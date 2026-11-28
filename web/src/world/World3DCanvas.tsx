@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
+import { FrameTimeMonitor } from './worldPerformance';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -166,6 +167,8 @@ export function World3DCanvas({
     pois: 0,
     weather: 'mist',
     cycle: 'day',
+    fps: 0,
+    frameMs: 0,
     status: 'Initialisation WebGL2',
   });
 
@@ -271,6 +274,8 @@ export function World3DCanvas({
     let timeLocation: WebGLUniformLocation | null = null;
     let weatherMotionLocation: WebGLUniformLocation | null = null;
     let disposed = false;
+    const frameTimeMonitor = new FrameTimeMonitor(120);
+    let lastPerformanceUpdate = 0;
 
     try {
       gl = canvas.getContext('webgl2', {
@@ -334,6 +339,14 @@ export function World3DCanvas({
         if (disposed || !gl || !program || !avatarBuffer) return;
         const delta = previousTime ? Math.min(50, time - previousTime) : 16.67;
         previousTime = time;
+        if (delta > 0) frameTimeMonitor.add(delta);
+        if (time - lastPerformanceUpdate >= 1000) {
+          const performance = frameTimeMonitor.summary();
+          setHud(current => current.fps === Math.round(performance.fps) && Math.abs(current.frameMs - performance.meanMs) < 0.05
+            ? current
+            : { ...current, fps: Math.round(performance.fps), frameMs: performance.meanMs });
+          lastPerformanceUpdate = time;
+        }
         const rect = canvas.getBoundingClientRect();
         if (rect.width < 2 || rect.height < 2) {
           frameId = window.requestAnimationFrame(draw);
@@ -890,6 +903,7 @@ export function World3DCanvas({
         <strong>FA-WORLD · WEBGL2</strong>
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
+        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
         <span>{hud.status}</span>
       </div>
       {rendererError && (
