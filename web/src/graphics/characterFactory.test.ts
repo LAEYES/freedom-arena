@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCharacterFrameOffset } from './characterFactory';
+import { getCharacterFrameOffset, getCharacterLayerProfile } from './characterFactory';
 
 describe('Freedom Arena character sprite factory', () => {
   it('cycles through deterministic walk offsets', () => {
@@ -8,6 +8,10 @@ describe('Freedom Arena character sprite factory', () => {
   it('keeps idle pose stable and attack pose distinct', () => {
     expect(getCharacterFrameOffset('idle',3)).toBe(0);
     expect(getCharacterFrameOffset('attack',2)).toBe(3);
+  });
+  it('selects modular weapon and faction trim layers', () => {
+    expect(getCharacterLayerProfile('Nomads','scout')).toMatchObject({ weapon: 'blade', armorTrim: '#e0bd78' });
+    expect(getCharacterLayerProfile('Eclipse','mystic')).toMatchObject({ weapon: 'staff', energy: '#e5c6ff' });
   });
   it('normalizes negative and large frame indices', () => {
     expect(getCharacterFrameOffset('walk',-1)).toBe(-2);
