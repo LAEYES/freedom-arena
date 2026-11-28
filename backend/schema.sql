@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS players (
   quests TEXT NOT NULL DEFAULT '[]',
   cards TEXT NOT NULL DEFAULT '[]',
   current_hp INTEGER,
+  status_effects TEXT NOT NULL DEFAULT '[]',
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
