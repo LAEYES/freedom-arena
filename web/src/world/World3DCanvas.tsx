@@ -120,8 +120,6 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
     uniform float uAmbientStrength;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
-    uniform vec3 uLightColor;
-    uniform float uAmbientStrength;
     out vec4 outColor;
     void main() {
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
@@ -174,6 +172,8 @@ function createVegetationProgram(gl: WebGL2RenderingContext): WebGLProgram {
     in vec3 vColor;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
+    uniform vec3 uLightColor;
+    uniform float uAmbientStrength;
     out vec4 outColor;
     void main() {
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
@@ -422,6 +422,8 @@ export function World3DCanvas({
     let vegetationFogAmountLocation: WebGLUniformLocation | null = null;
     let vegetationTimeLocation: WebGLUniformLocation | null = null;
     let vegetationWindLocation: WebGLUniformLocation | null = null;
+    let vegetationLightColorLocation: WebGLUniformLocation | null = null;
+    let vegetationAmbientLocation: WebGLUniformLocation | null = null;
     const terrainBatchBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     const sceneBatchBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let activeTerrainBatchKey = '';
@@ -497,7 +499,9 @@ export function World3DCanvas({
       vegetationFogAmountLocation = gl.getUniformLocation(vegetationProgram, 'uFogAmount');
       vegetationTimeLocation = gl.getUniformLocation(vegetationProgram, 'uTime');
       vegetationWindLocation = gl.getUniformLocation(vegetationProgram, 'uWindStrength');
-      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation || !vegetationTimeLocation || !vegetationWindLocation) {
+      vegetationLightColorLocation = gl.getUniformLocation(vegetationProgram, 'uLightColor');
+      vegetationAmbientLocation = gl.getUniformLocation(vegetationProgram, 'uAmbientStrength');
+      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation || !vegetationTimeLocation || !vegetationWindLocation || !vegetationLightColorLocation || !vegetationAmbientLocation) {
         throw new Error('Uniformes du programme de végétation instanciée introuvables.');
       }
 
@@ -723,8 +727,8 @@ export function World3DCanvas({
           gl.uniformMatrix4fv(vegetationMatrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
           gl.uniform3fv(vegetationFogColorLocation, fog);
           gl.uniform1f(vegetationFogAmountLocation, environment.weather === 'clear' ? (night ? 0.12 : 0.04) : storm ? 0.42 : 0.24);
-          gl.uniform3fv(gl.getUniformLocation(vegetationProgram, 'uLightColor'), lightColor);
-          gl.uniform1f(gl.getUniformLocation(vegetationProgram, 'uAmbientStrength'), ambientStrength);
+          gl.uniform3fv(vegetationLightColorLocation, lightColor);
+          gl.uniform1f(vegetationAmbientLocation, ambientStrength);
           gl.uniform1f(vegetationTimeLocation, time * 0.001);
           gl.uniform1f(vegetationWindLocation, environment.weather === 'storm' ? 1.0 : environment.weather === 'clear' ? 0.22 : 0.58);
           gl.bindBuffer(gl.ARRAY_BUFFER, vegetationTemplateBuffer);
