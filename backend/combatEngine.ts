@@ -1,7 +1,7 @@
 export type CombatEffect = "burn" | "poison" | "weaken" | "expose" | "shield" | "regeneration";
 export type PersistentStatus = { type: "burn" | "poison" | "weaken"; remaining: number; potency: number };
 export type StoredCard = {
-  id?: unknown; name?: unknown; rarity?: unknown; power?: unknown;
+  id?: unknown; name?: unknown; rarity?: unknown; slot?: unknown; power?: unknown;
   defense?: unknown; vitality?: unknown; level?: unknown;
   ability?: { id?: unknown; effect?: unknown; potency?: unknown };
   resistances?: unknown;
