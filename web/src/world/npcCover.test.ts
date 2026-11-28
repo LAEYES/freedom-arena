@@ -43,7 +43,6 @@ describe('NPC defensive terrain positions', () => {
     expect(findNpcCoverPositions(map, { i: 16, j: 16 }, 100).length)
       .toBe(findNpcCoverPositions(map, { i: 16, j: 16 }, 12).length);
   });
-});
 
   it('ranks hard cover that blocks the threat line ahead of exposed positions', () => {
     const ranked = findNpcDirectionalCoverPositions(map, { i: 16, j: 16 }, { i: 20, j: 16 }, 12);
@@ -54,3 +53,4 @@ describe('NPC defensive terrain positions', () => {
     expect(protectedPosition?.blocksThreatLineOfSight).toBe(true);
     expect(ranked[0].blocksThreatLineOfSight).toBe(true);
   });
+});
