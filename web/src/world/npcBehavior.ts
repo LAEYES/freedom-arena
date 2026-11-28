@@ -1,0 +1,175 @@
+import { findTerrainPath, isTileBlocked, tileKey } from './navigation';
+import type { TileCoordinate } from './coordinates';
+import type { TerrainMap } from './terrain';
+import { canNpcPerceivePlayer } from './npcPerception';
+
+export type NpcBehaviorState = 'IDLE' | 'PATROL' | 'ALERT' | 'CHASE' | 'RETURN';
+export type NpcBehaviorConfig = {
+  alertRadius?: number;
+  chaseRadius?: number;
+  disengageRadius?: number;
+  maxChaseTiles?: number;
+  stepDurationMs?: number;
+  alertHoldMs?: number;
+  blockedTiles?: ReadonlySet<string>;
+};
+export type NpcBehaviorAgent = {
+  id: string;
+  home: TileCoordinate;
+  position: TileCoordinate;
+  previousPosition: TileCoordinate;
+  facing: { i: number; j: number };
+  state: NpcBehaviorState;
+  path: TileCoordinate[];
+  pathIndex: number;
+  targetKey: string | null;
+  stateElapsedMs: number;
+  stepElapsedMs: number;
+  stepDurationMs: number;
+};
+export type PlayerTile = TileCoordinate;
+export type NpcBehaviorPose = { x: number; y: number; progress: number };
+
+const distance = (a: TileCoordinate, b: TileCoordinate) =>
+  Math.abs(a.i - b.i) + Math.abs(a.j - b.j);
+const key = (tile: TileCoordinate) => tileKey(tile.i, tile.j);
+
+export function createNpcBehaviorAgent(id: string, home: TileCoordinate): NpcBehaviorAgent {
+  const spawn = { ...home };
+  return {
+    id, home: spawn, position: { ...spawn }, previousPosition: { ...spawn }, facing: { i: 1, j: 0 },
+    state: 'PATROL', path: [spawn], pathIndex: 0, targetKey: null,
+    stateElapsedMs: 0, stepElapsedMs: 0, stepDurationMs: 420,
+  };
+}
+
+/** Deterministic local perception, dynamic obstacle avoidance and route selection. */
+export function updateNpcBehavior(
+  map: TerrainMap,
+  agent: NpcBehaviorAgent,
+  player: PlayerTile,
+  deltaMs: number,
+  config: NpcBehaviorConfig = {},
+): NpcBehaviorAgent {
+  const safeDelta = Number.isFinite(deltaMs) ? Math.max(0, Math.min(100, deltaMs)) : 0;
+  const alertRadius = Math.max(1, config.alertRadius ?? 7);
+  const chaseRadius = Math.max(1, Math.min(alertRadius, config.chaseRadius ?? 4));
+  const disengageRadius = Math.max(alertRadius, config.disengageRadius ?? 10);
+  const maxChaseTiles = Math.max(1, config.maxChaseTiles ?? 12);
+  const stepDurationMs = Math.max(100, config.stepDurationMs ?? agent.stepDurationMs ?? 420);
+  const alertHoldMs = Math.max(0, config.alertHoldMs ?? 1800);
+  const range = distance(agent.position, player);
+
+  let state = agent.state;
+  if (state === 'IDLE') state = 'PATROL';
+  if (state === 'PATROL' && range <= alertRadius
+    && canNpcPerceivePlayer(map, agent.position, agent.facing, player, { radius: alertRadius, halfAngleDegrees: 60 })) state = 'ALERT';
+  else if (state === 'ALERT' && range <= chaseRadius) state = 'CHASE';
+  else if (state === 'ALERT' && range > alertRadius
+    && agent.stateElapsedMs + safeDelta >= alertHoldMs) state = 'PATROL';
+  else if (state === 'CHASE' && (range > disengageRadius || distance(agent.home, player) > maxChaseTiles)) state = 'RETURN';
+  else if (state === 'RETURN' && distance(agent.position, agent.home) === 0) state = 'PATROL';
+
+  const blockedTiles = new Set(config.blockedTiles ?? []);
+  blockedTiles.delete(key(agent.position));
+  let target: TileCoordinate | null = state === 'RETURN' ? agent.home : null;
+  let candidatePath: TileCoordinate[] | null = null;
+  let targetKey: string | null = target ? key(target) : null;
+  const nextPathTile = agent.path[agent.pathIndex + 1];
+  const pathBlocked = !!nextPathTile && isTileBlocked(map, nextPathTile.i, nextPathTile.j, blockedTiles);
+
+  if (state === 'CHASE') {
+    // Keep the player's tile occupied: NPCs pursue an adjacent interaction tile,
+    // never the player's exact cell. Reuse the current route until its target moves
+    // or the next step becomes occupied, avoiding repeated A* searches per frame.
+    blockedTiles.add(key(player));
+    const playerKey = key(player);
+    const currentTargetMatches = agent.state === 'CHASE'
+      && agent.targetKey?.startsWith(playerKey + '>') === true;
+    if (currentTargetMatches && !pathBlocked) {
+      targetKey = agent.targetKey;
+    } else {
+      const adjacentTargets = [
+        { i: player.i - 1, j: player.j },
+        { i: player.i + 1, j: player.j },
+        { i: player.i, j: player.j - 1 },
+        { i: player.i, j: player.j + 1 },
+      ];
+      for (const candidate of adjacentTargets) {
+        if (isTileBlocked(map, candidate.i, candidate.j, blockedTiles)) continue;
+        const path = findTerrainPath(map, agent.position, candidate, {
+          allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
+        });
+        if (path.length && (!candidatePath || path.length < candidatePath.length)) {
+          target = candidate;
+          candidatePath = path;
+        }
+      }
+      targetKey = playerKey + '>' + (target ? key(target) : 'unreachable');
+    }
+  }
+
+  const needsPath = targetKey !== agent.targetKey || state !== agent.state || pathBlocked;
+  let path = agent.path;
+  let pathIndex = agent.pathIndex;
+  let nextTargetKey = agent.targetKey;
+
+  if (needsPath) {
+    if (target) {
+      const candidate = candidatePath ?? findTerrainPath(map, agent.position, target, {
+        allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
+      });
+      path = candidate.length ? candidate : [agent.position];
+      pathIndex = 0;
+      nextTargetKey = targetKey;
+    } else {
+      path = [agent.position];
+      pathIndex = 0;
+      nextTargetKey = targetKey;
+    }
+  }
+
+  let position = agent.position;
+  let previousPosition = agent.previousPosition;
+  let facing = agent.facing;
+  let stepElapsedMs = agent.stepElapsedMs + safeDelta;
+  if ((state === 'CHASE' || state === 'RETURN') && path.length > 1 && pathIndex < path.length - 1 && stepElapsedMs >= stepDurationMs) {
+    const next = path[pathIndex + 1];
+    if (!isTileBlocked(map, next.i, next.j, blockedTiles)) {
+      previousPosition = position;
+      facing = { i: next.i - position.i, j: next.j - position.j };
+      position = { i: next.i, j: next.j, elevation: next.elevation };
+      pathIndex += 1;
+    } else {
+      nextTargetKey = null;
+    }
+    stepElapsedMs %= stepDurationMs;
+  }
+
+  if (state === 'RETURN' && position.i === agent.home.i && position.j === agent.home.j) {
+    state = 'PATROL';
+    path = [position];
+    pathIndex = 0;
+    nextTargetKey = null;
+    stepElapsedMs = 0;
+  }
+
+  return {
+    ...agent, position, previousPosition, facing, state, path, pathIndex,
+    targetKey: nextTargetKey,
+    stateElapsedMs: state === agent.state ? agent.stateElapsedMs + safeDelta : 0,
+    stepElapsedMs, stepDurationMs,
+  };
+}
+
+export function getNpcBehaviorPose(agent: NpcBehaviorAgent): NpcBehaviorPose {
+  const progress = agent.path.length > 1 && agent.pathIndex < agent.path.length - 1
+    ? Math.max(0, Math.min(1, agent.stepElapsedMs / agent.stepDurationMs))
+    : 0;
+  const next = agent.path[agent.pathIndex + 1] ?? agent.position;
+  return {
+    x: agent.position.i + (next.i - agent.position.i) * progress,
+    y: agent.position.j + (next.j - agent.position.j) * progress,
+    progress,
+  };
+}

@@ -3,7 +3,8 @@
 Production target: Cloudflare Workers + D1.
 
 - Worker API: `backend/worker.ts`
-- D1 schema: `backend/schema.sql`
+- D1 bootstrap schema: `backend/schema.sql`
+- Incremental world-sync migration: `backend/migrations/002_world_sync.sql`
 - Wrangler config: `backend/wrangler.toml`
 - The browser must never receive a Cloudflare secret.
 - Authentication/session validation should be added before exposing player writes publicly.
@@ -27,6 +28,30 @@ npx wrangler d1 execute freedom-arena --remote --file=./schema.sql
 npx wrangler deploy
 ```
 
+For an existing database that already has the `players` table, apply only the new world-sync migration:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/002_world_sync.sql
+```
+
+The migration adds:
+
+- `world_player_presence`: per-player zone, tile, heartbeat and optimistic revision;
+- `world_zone_state`: revisioned JSON snapshot for zone-owned state;
+- `world_event_log`: append-only movement event records.
+
+## World synchronization API
+
+- `GET /world/:zoneId/snapshot`: zone state, recent player presence and the last 50 world events.
+- `POST /world/:zoneId/join`: initialize or refresh a player's zone presence.
+- `POST /world/:zoneId/move`: cardinal adjacent movement guarded by source coordinates and expected player revision; updates presence and appends a movement event in one D1 batch.
+- `POST /world/:zoneId/heartbeat`: refresh presence expiry.
+- `POST /world/:zoneId/state`: compare-and-swap zone JSON state, capped at 32 KiB.
+
+The web client keeps this integration disabled by default. After applying the schema and deploying the Worker, enable it in the Vite build with `VITE_WORLD_SYNC_ENABLED=true` and set `VITE_API_URL` to the Worker URL.
+
+The movement endpoint currently validates sector bounds, cardinal adjacency, source tile and revision. It does not yet validate terrain walkability, bridge ownership, player authentication or combat rules; it is a concurrency/persistence foundation, not an anti-cheat authority.
+
 Cloudflare documents `d1 create`, remote `d1 execute`, and `wrangler deploy` as the standard commands for this flow.
 
 ## GitHub Actions
@@ -45,6 +70,7 @@ variable into the Vite build.
 
 The current API uses a browser-generated player ID and is suitable for development
 and prototype persistence. It is **not anti-cheat authentication**: a client can
-currently submit arbitrary player state. Before treating the API as production
-multiplayer infrastructure, add authenticated sessions and server-side validation
-of gameplay mutations.
+currently submit arbitrary player state or zone JSON. Before treating the API as
+production multiplayer infrastructure, add authenticated sessions, server-side
+terrain/bridge validation, schema validation for zone mutations, rate limits and
+abuse controls. Presence records expire from snapshots after 90 seconds without a heartbeat.
