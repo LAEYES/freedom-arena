@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { electNpcSquadLeader, formationAnchor, shouldRefreshNpcFormation } from './npcSquad';
+import { electNpcSquadLeader, formationAnchor, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 
 describe('NPC squad coordination primitives', () => {
   it('elects the same leader regardless of input order', () => {
@@ -37,5 +37,47 @@ describe('NPC squad coordination primitives', () => {
       { i: 0, j: 0 }, { i: 3, j: 0 }, 300,
       { displacementTiles: 3, cooldownMs: 300 },
     )).toBe(true);
+  });
+});
+
+describe('persistent squad pursuit and regrouping', () => {
+  const members = ['npc-a', 'npc-b', 'npc-c'];
+
+  it('requests a regroup only when a known squad member disengages from CHASE', () => {
+    expect(shouldRegroupNpcSquad('npc-b', members, 'CHASE', 'RETURN')).toBe(true);
+    expect(shouldRegroupNpcSquad('npc-x', members, 'CHASE', 'RETURN')).toBe(false);
+    expect(shouldRegroupNpcSquad('npc-b', members, 'ALERT', 'RETURN')).toBe(false);
+    expect(shouldRegroupNpcSquad('npc-b', members, 'CHASE', 'ALERT')).toBe(false);
+  });
+
+  it('resets a returning member route at its current position and retains squad agent data', () => {
+    const agent = {
+      id: 'npc-a',
+      home: { i: 2, j: 2 },
+      position: { i: 9, j: 8 },
+      previousPosition: { i: 9, j: 7 },
+      facing: { i: 0, j: 1 },
+      state: 'RETURN' as const,
+      path: [{ i: 9, j: 8 }, { i: 8, j: 8 }, { i: 7, j: 8 }],
+      pathIndex: 0,
+      targetKey: '2:2',
+      stateElapsedMs: 300,
+      stepElapsedMs: 80,
+      stepDurationMs: 420,
+    };
+    const regrouped = prepareNpcSquadRegroup(agent);
+    expect(regrouped).toMatchObject({
+      id: 'npc-a',
+      home: { i: 2, j: 2 },
+      position: { i: 9, j: 8 },
+      previousPosition: { i: 9, j: 8 },
+      state: 'ALERT',
+      path: [{ i: 9, j: 8 }],
+      pathIndex: 0,
+      targetKey: null,
+      stateElapsedMs: 0,
+      stepElapsedMs: 0,
+    });
+    expect(regrouped.facing).toEqual(agent.facing);
   });
 });
