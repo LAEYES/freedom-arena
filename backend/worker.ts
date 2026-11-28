@@ -1,5 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
+import { calculateElo, matchmakingRatingWindow, validatePvpAction } from './pvpEngine';
 import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, resolveVictoryLoot, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
@@ -158,6 +159,164 @@ export default {
     const routeFamily = url.pathname.startsWith('/world/') ? 'world' : url.pathname === '/player' ? 'player' : 'other';
     if (!await enforceRateLimit(env.DB, identity.subject, routeFamily)) {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
+    }
+
+    const pvpRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/pvp\\/(queue|status|cancel)$/);
+    if (pvpRoute) {
+      const zoneId = pvpRoute[1], action = pvpRoute[2], playerId = identity.subject;
+      if (request.method === "POST" && action === "queue") {
+        try {
+          const player = await env.DB.prepare("SELECT level FROM players WHERE id=?").bind(playerId).first<{level:number}>();
+          if (!player) return json({ error: "player_not_initialized" }, 409);
+          const presence = await env.DB.prepare("SELECT 1 AS ok FROM world_player_presence WHERE player_id=? AND zone_id=? AND updated_at >= datetime('now','-90 seconds')").bind(playerId,zoneId).first();
+          if (!presence) return json({ error: "player_not_present_in_zone" }, 403);
+          const active = await env.DB.prepare("SELECT m.match_id,m.status FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active')").bind(playerId).first<{match_id:string;status:string}>();
+          if (active) return json({ status: active.status, matchId: active.match_id, alreadyMatched: true }, 200);
+          const existing = await env.DB.prepare("SELECT rating,queued_at,status,match_id FROM pvp_queue WHERE player_id=?").bind(playerId).first<{rating:number;queued_at:string;status:string;match_id:string|null}>();
+          if (existing?.status === "matched" && existing.match_id) return json({status:"matched",matchId:existing.match_id},200);
+          await env.DB.prepare("INSERT INTO pvp_queue(player_id,zone_id,rating,level,status,match_id,queued_at,updated_at) VALUES(?,?,1000,?,'queued',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(player_id) DO UPDATE SET zone_id=excluded.zone_id,level=excluded.level,status='queued',match_id=NULL,queued_at=CASE WHEN pvp_queue.status='queued' THEN pvp_queue.queued_at ELSE CURRENT_TIMESTAMP END,updated_at=CURRENT_TIMESTAMP WHERE pvp_queue.status IN ('queued','cancelled')").bind(playerId,zoneId,Math.max(1,Math.min(100,Math.floor(player.level)))).run();
+          const me = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued'").bind(playerId).first<{rating:number;queued_at:string}>();
+          if (!me) return json({error:"queue_state_conflict"},409);
+          const waited = Math.max(0,Math.floor((Date.now()-Date.parse(me.queued_at+"Z"))/1000));
+          const ratingWindow = matchmakingRatingWindow(waited);
+          const opponent = await env.DB.prepare("SELECT q.player_id,q.rating,q.level FROM pvp_queue q JOIN world_player_presence p ON p.player_id=q.player_id AND p.zone_id=q.zone_id WHERE q.status='queued' AND q.zone_id=? AND q.player_id<>? AND ABS(q.rating-?)<=? AND ABS(q.level-?)<=10 AND p.updated_at >= datetime('now','-90 seconds') ORDER BY q.queued_at ASC LIMIT 1").bind(zoneId,playerId,me.rating,ratingWindow,player.level).first<{player_id:string;rating:number;level:number}>();
+          if (!opponent) return json({status:"queued",rating:me.rating,ratingWindow,waitSeconds:waited});
+          const matchId = crypto.randomUUID();
+          try {
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status,turn_deadline) SELECT ?,?,?,?,?,?,?,?,'ready',datetime('now','+45 seconds') WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,me.rating,opponent.rating,player.level,opponent.level,playerId,opponent.player_id),
+              env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,playerId,matchId),
+              env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,opponent.player_id,matchId),
+              env.DB.prepare("INSERT INTO pvp_active_players(player_id,match_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(playerId,matchId,matchId),
+              env.DB.prepare("INSERT INTO pvp_active_players(player_id,match_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(opponent.player_id,matchId,matchId),
+              env.DB.prepare("UPDATE pvp_queue SET status='matched',match_id=?,updated_at=CURRENT_TIMESTAMP WHERE player_id IN (?,?) AND status='queued'").bind(matchId,playerId,opponent.player_id),
+            ]);
+            const matched = await env.DB.prepare("SELECT match_id FROM pvp_match_participants WHERE player_id=? AND match_id=?").bind(playerId,matchId).first();
+            if (matched) return json({status:"matched",matchId,opponent:{level:opponent.level,rating:opponent.rating}});
+          } catch { /* Another queue request may have claimed one participant first. */ }
+          const current = await env.DB.prepare("SELECT m.match_id,m.status FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active')").bind(playerId).first<{match_id:string;status:string}>();
+          if (current) return json({status:current.status,matchId:current.match_id});
+          return json({status:"queued",rating:me.rating,ratingWindow});
+        } catch { return json({error:"pvp_queue_failed"},500); }
+      }
+      if (request.method === "GET" && action === "status") {
+        try {
+          const match = await env.DB.prepare("SELECT m.match_id,m.zone_id,m.player_a,m.player_b,m.rating_a,m.rating_b,m.level_a,m.level_b,m.status,m.winner_id,m.created_at FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id undefined").bind(playerId).first<Record<string,unknown>>();
+          if (match) return json({match});
+          const queued = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued' AND zone_id=?").bind(playerId,zoneId).first<{rating:number;queued_at:string}>();
+          return json(queued ? {status:"queued",rating:queued.rating,queuedAt:queued.queued_at} : {status:"idle"});
+        } catch { return json({error:"pvp_status_failed"},500); }
+      }
+      if (request.method === "POST" && action === "cancel") {
+        try {
+          const result = await env.DB.prepare("UPDATE pvp_queue SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND zone_id=? AND status='queued'").bind(playerId,zoneId).run();
+          return json({cancelled:Number(result.meta.changes??0)===1});
+        } catch { return json({error:"pvp_cancel_failed"},500); }
+      }
+      return json({error:"method_not_allowed"},405);
+    }
+
+    const pvpMatchRoute = url.pathname.match(/^\\/pvp\\/matches\\/([a-f0-9-]{36})\\/(state|action|forfeit)$/i);
+    if (pvpMatchRoute) {
+      const matchId = pvpMatchRoute[1], action = pvpMatchRoute[2], playerId = identity.subject;
+      try {
+        const match = await env.DB.prepare("SELECT * FROM pvp_matches WHERE match_id=? AND (player_a=? OR player_b=?)").bind(matchId,playerId,playerId).first<Record<string,unknown>>();
+        if (!match) return json({error:"match_not_found"},404);
+        const parseState = (raw:unknown) => { try { const v=JSON.parse(String(raw??"{}")); return v&&typeof v==="object"&&!Array.isArray(v)?v as Record<string,any>:{}; } catch { return {}; } };
+        if (request.method==="GET" && action==="state") {
+          const turns=await env.DB.prepare("SELECT turn_number,actor_id,action,damage,target_hp,created_at FROM pvp_turns WHERE match_id=? ORDER BY turn_number ASC").bind(matchId).all<Record<string,unknown>>();
+          return json({matchId,status:match.status,turnNumber:match.turn_number,turnDeadline:match.turn_deadline,winnerId:match.winner_id,players:{a:match.player_a,b:match.player_b},state:parseState(match.state_json),turns:turns.results});
+        }
+        if (request.method!=="POST" || (action!=="action" && action!=="forfeit")) return json({error:"method_not_allowed"},405);
+        if (action==="forfeit") {
+          if (match.status!=="ready" && match.status!=="active") return json({error:"match_not_active"},409);
+          const winner=playerId===match.player_a?String(match.player_b):String(match.player_a);
+          const changed=await env.DB.prepare("UPDATE pvp_matches SET status='completed',winner_id=?,updated_at=CURRENT_TIMESTAMP,settled_at=CURRENT_TIMESTAMP WHERE match_id=? AND status IN ('ready','active')").bind(winner,matchId).run();
+          if (Number(changed.meta.changes??0)!==1) return json({error:"match_already_settled"},409);
+          const elo=calculateElo(Number(match.rating_a),Number(match.rating_b),winner===match.player_a?1:0);
+          await env.DB.batch([
+            env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,match.player_a,match.player_b,match.rating_a,match.rating_b,elo.ratingA,elo.ratingB),
+            env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingA,match.player_a),
+            env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingB,match.player_b),
+            env.DB.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
+          ]);
+          return json({matchId,status:"completed",winnerId:winner,forfeit:true,ratings:{a:elo.ratingA,b:elo.ratingB}});
+        }
+        if (match.status!=="ready" && match.status!=="active") return json({error:"match_not_active"},409);
+        const body=await request.json().catch(()=>null) as {commandId?:unknown;action?:unknown}|null;
+        if (typeof body?.commandId!=="string" || !/^[a-zA-Z0-9_-]{12,80}$/.test(body.commandId)) return json({error:"invalid_command_id"},400);
+        const combatAction=validatePvpAction(body.action);
+        if (!combatAction) return json({error:"invalid_pvp_action"},400);
+        const prior=await env.DB.prepare("SELECT turn_number,state_json,damage,target_hp FROM pvp_turns WHERE command_id=? AND actor_id=?").bind(body.commandId,playerId).first<Record<string,unknown>>();
+        if (prior) return json({matchId,duplicate:true,turnNumber:prior.turn_number,state:parseState(prior.state_json),damage:prior.damage,targetHp:prior.target_hp});
+        let state=parseState(match.state_json);
+        if (!state.a || !state.b) {
+          const [a,b]=await Promise.all([
+            env.DB.prepare("SELECT level,cards,equipment_json FROM players WHERE id=?").bind(match.player_a).first<Record<string,unknown>>(),
+            env.DB.prepare("SELECT level,cards,equipment_json FROM players WHERE id=?").bind(match.player_b).first<Record<string,unknown>>()
+          ]);
+          if (!a||!b) return json({error:"match_player_data_missing"},409);
+          const stats=(row:Record<string,unknown>)=>{
+            const cards=parseJson<StoredCard[]>(row.cards,[]);
+            const equipment=parseJson<Record<string,string>>(row.equipment_json,{});
+            return buildEquippedCombatant(Math.max(1,Math.min(100,Number(row.level)||1)),Array.isArray(cards)?cards:[],equipment);
+          };
+          const ca=stats(a),cb=stats(b);
+          state={a:{hp:ca.maxHp,maxHp:ca.maxHp,attack:ca.attack,defense:ca.defense,speed:ca.speed,guard:0},b:{hp:cb.maxHp,maxHp:cb.maxHp,attack:cb.attack,defense:cb.defense,speed:cb.speed,guard:0}};
+        }
+        const turnNumber=Number(match.turn_number??0), actor=turnNumber%2===0?String(match.player_a):String(match.player_b);
+        if (actor!==playerId) return json({error:"not_your_turn",expectedTurn:turnNumber+1},409);
+        if (typeof match.turn_deadline==="string" && Date.parse(match.turn_deadline.replace(" ","T")+"Z") < Date.now()) {
+          const winner=actor===match.player_a?String(match.player_b):String(match.player_a);
+          const settled=await env.DB.prepare("UPDATE pvp_matches SET status='completed',winner_id=?,updated_at=CURRENT_TIMESTAMP,settled_at=CURRENT_TIMESTAMP WHERE match_id=? AND status IN ('ready','active') AND turn_number=? AND turn_deadline < CURRENT_TIMESTAMP").bind(winner,matchId,turnNumber).run();
+          if (Number(settled.meta.changes??0)===1) {
+            const elo=calculateElo(Number(match.rating_a),Number(match.rating_b),winner===match.player_a?1:0);
+            await env.DB.batch([
+              env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,match.player_a,match.player_b,match.rating_a,match.rating_b,elo.ratingA,elo.ratingB),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingA,match.player_a),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=?").bind(elo.ratingB,match.player_b),
+              env.DB.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
+            ]);
+          }
+          return json({matchId,status:"completed",winnerId:winner,forfeit:true,reason:"turn_timeout"});
+        }
+        const mine=actor===match.player_a?"a":"b",target=mine==="a"?"b":"a";
+        const me=state[mine],foe=state[target];
+        let damage=0;
+        if (combatAction==="guard") me.guard=Math.min(100,Math.floor(me.defense*0.75)+8);
+        else {
+          const multiplier=combatAction==="skill"?1.5:1;
+          const variance=0.9+Math.random()*0.2;
+          const raw=Math.floor(me.attack*multiplier*variance);
+          damage=Math.max(1,Math.min(250,raw-Math.max(0,foe.defense+foe.guard)));
+          foe.hp=Math.max(0,foe.hp-damage); foe.guard=0;
+        }
+        const nextTurn=turnNumber+1, winner=foe.hp<=0?playerId:null, completed=Boolean(winner)||nextTurn>=40;
+        const nextState=JSON.stringify(state), status=completed?"completed":"active";
+        const command=body.commandId;
+        const statements=[
+          env.DB.prepare("INSERT INTO pvp_turns(command_id,match_id,turn_number,actor_id,action,damage,target_hp,state_json) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=? AND status IN ('ready','active') AND turn_number=? AND (CASE WHEN turn_number%2=0 THEN player_a ELSE player_b END)=?)").bind(command,matchId,nextTurn,playerId,combatAction,damage,foe.hp,nextState,matchId,turnNumber,playerId),
+          env.DB.prepare("UPDATE pvp_matches SET status=?,turn_number=?,state_json=?,winner_id=?,updated_at=CURRENT_TIMESTAMP,turn_deadline=datetime('now','+45 seconds'),settled_at=CASE WHEN ?='completed' THEN CURRENT_TIMESTAMP ELSE settled_at END,action_count=action_count+1 WHERE match_id=? AND status IN ('ready','active') AND turn_number=? AND (CASE WHEN turn_number%2=0 THEN player_a ELSE player_b END)=? AND EXISTS(SELECT 1 FROM pvp_turns WHERE command_id=?)").bind(status,nextTurn,nextState,winner,status,matchId,turnNumber,playerId,command)
+        ];
+        await env.DB.batch(statements);
+        const confirmed=await env.DB.prepare("SELECT status,turn_number,winner_id FROM pvp_matches WHERE match_id=?").bind(matchId).first<{status:string;turn_number:number;winner_id:string|null}>();
+        const committed=await env.DB.prepare("SELECT command_id FROM pvp_turns WHERE command_id=?").bind(command).first();
+        if (!committed) return json({error:"turn_conflict_retry_state"},409);
+        if (confirmed?.status==="completed") {
+          const fresh=await env.DB.prepare("SELECT rating_a,rating_b,player_a,player_b FROM pvp_matches WHERE match_id=?").bind(matchId).first<{rating_a:number;rating_b:number;player_a:string;player_b:string}>();
+          if (fresh) {
+            const scoreA=confirmed.winner_id===null?0.5:(confirmed.winner_id===fresh.player_a?1:0);
+            const elo=calculateElo(fresh.rating_a,fresh.rating_b,scoreA);
+            await env.DB.batch([
+              env.DB.prepare("INSERT OR IGNORE INTO pvp_rating_log(match_id,player_a,player_b,before_a,before_b,after_a,after_b) VALUES(?,?,?,?,?,?,?)").bind(matchId,fresh.player_a,fresh.player_b,fresh.rating_a,fresh.rating_b,elo.ratingA,elo.ratingB),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND EXISTS(SELECT 1 FROM pvp_rating_log WHERE match_id=?)").bind(elo.ratingA,fresh.player_a,matchId),
+              env.DB.prepare("UPDATE pvp_queue SET rating=?,status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND EXISTS(SELECT 1 FROM pvp_rating_log WHERE match_id=?)").bind(elo.ratingB,fresh.player_b,matchId),
+              env.DB.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
+            ]);
+          }
+        }
+        return json({matchId,status:confirmed?.status,turnNumber:confirmed?.turn_number,winnerId:confirmed?.winner_id,state,damage,action:combatAction});
+      } catch { return json({error:"pvp_action_failed"},500); }
     }
 
     const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip|inventory)$/);
