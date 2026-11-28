@@ -1,0 +1,6 @@
+# Primary repository ownership. Keep this file synchronized with maintainers.
+/* @LAEYES
+/.github/ @LAEYES
+/supabase/ @LAEYES
+/backend/ @LAEYES
+/web/ @LAEYES
