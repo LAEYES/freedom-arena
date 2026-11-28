@@ -5,6 +5,8 @@ import { joinZonePresence, updateZonePresence, type ZonePresence } from './lib/r
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { GraphicsStudio } from './graphics/GraphicsStudio';
+import { CharacterStudio } from './graphics/CharacterStudio';
+import { drawCharacterSprite, type CharacterFaction } from './graphics/characterFactory';
 import { createAsset, paintProceduralTile, type Biome } from './graphics/assetFactory';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
 import { createEncounter, getCombatReward, getCombatSummary, playerAttack, type CombatState } from './combat';
@@ -32,48 +34,9 @@ function drawCachedProceduralTile(ctx: CanvasRenderingContext2D, asset: ReturnTy
   ctx.drawImage(texture, x, y);
 }
 
-function drawPixelCharacter(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  size: number,
-  accent: string,
-  hostile = false,
-) {
-  const s = Math.max(16, Math.floor(size));
-  const px = Math.max(2, Math.floor(s / 16));
-  ctx.save();
-  ctx.imageSmoothingEnabled = false;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,.42)';
-  ctx.fillRect(x - px * 4, y + px * 5, px * 8, px * 2);
-  // legs
-  ctx.fillStyle = '#101521';
-  ctx.fillRect(x - px * 4, y + px * 2, px * 3, px * 5);
-  ctx.fillRect(x + px, y + px * 2, px * 3, px * 5);
-  // body / armor
-  ctx.fillStyle = hostile ? '#5b2630' : '#26354d';
-  ctx.fillRect(x - px * 5, y - px * 2, px * 10, px * 6);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - px * 3, y - px, px * 6, px * 3);
-  // arms
-  ctx.fillStyle = '#151c29';
-  ctx.fillRect(x - px * 7, y - px, px * 2, px * 5);
-  ctx.fillRect(x + px * 5, y - px, px * 2, px * 5);
-  // head
-  ctx.fillStyle = '#c49a7a';
-  ctx.fillRect(x - px * 4, y - px * 8, px * 8, px * 6);
-  // helmet
-  ctx.fillStyle = '#202b3e';
-  ctx.fillRect(x - px * 5, y - px * 9, px * 10, px * 3);
-  ctx.fillStyle = accent;
-  ctx.fillRect(x - px * 3, y - px * 6, px * 6, px);
-  // sword / tool
-  ctx.fillStyle = '#d7e0ee';
-  ctx.fillRect(x + px * 7, y - px * 7, px, px * 10);
-  ctx.fillStyle = '#8c9ab0';
-  ctx.fillRect(x + px * 5, y + px * 2, px * 5, px);
-  ctx.restore();
+function drawPixelCharacter(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, faction: CharacterFaction, hostile = false) {
+  const role = faction === 'Nomads' ? 'scout' : faction === 'Eclipse' ? 'mystic' : 'vanguard';
+  drawCharacterSprite(ctx, x, y, size, { faction, hostile, role, pose: 'idle', frame: 0 });
 }
 
 function drawPixelPoi(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
@@ -228,7 +191,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         const mapPoi=zone.pointsOfInterest.map((name,index)=>({name,x:Math.floor((index+1)*60/(zone.pointsOfInterest.length+1)),y:5+index*8}));
         mapPoi.forEach((poi)=>{const sx=(poi.x-cameraX)*tile+tile/2,sy=(poi.y-cameraY)*tile+tile/2;if(sx<-40||sy<-40||sx>rect.width+40||sy>rect.height+40)return;drawPixelPoi(sceneCtx,sx,sy,30);sceneCtx.fillStyle='#ead9ad';sceneCtx.font='600 10px Inter,sans-serif';sceneCtx.fillText(poi.name,sx+20,sy+3);});
         zone.pointsOfInterest.forEach((name,index)=>{const x=24+((index+1)*(rect.width-48))/(zone.pointsOfInterest.length+1),y=rect.height*(index%2===0?.42:.68);sceneCtx.fillStyle='#9db4e8';sceneCtx.beginPath();sceneCtx.arc(x,y,7,0,Math.PI*2);sceneCtx.fill();sceneCtx.fillStyle='#c9d7f5';sceneCtx.font='11px Inter,sans-serif';sceneCtx.fillText(name,x+10,y+4);});
-        npcs.forEach((npc)=>{const sx=(npc.x-cameraX)*tile+tile/2,sy=(npc.y-cameraY)*tile+tile/2;if(sx<-48||sy<-48||sx>rect.width+48||sy>rect.height+48)return;const accent=npc.faction==='Aegis'?'#8fa9e8':npc.faction==='Nomads'?'#d8b56a':'#ad8ee8';drawPixelCharacter(sceneCtx,sx,sy,34,accent,npc.faction==='Eclipse');sceneCtx.fillStyle='#e5ebfa';sceneCtx.font='600 9px Inter,sans-serif';sceneCtx.fillText(npc.activity.toUpperCase(),sx+22,sy+3);});
+        npcs.forEach((npc)=>{const sx=(npc.x-cameraX)*tile+tile/2,sy=(npc.y-cameraY)*tile+tile/2;if(sx<-48||sy<-48||sx>rect.width+48||sy>rect.height+48)return;drawPixelCharacter(sceneCtx,sx,sy,34,npc.faction as CharacterFaction,npc.faction==='Eclipse');sceneCtx.fillStyle='#e5ebfa';sceneCtx.font='600 9px Inter,sans-serif';sceneCtx.fillText(npc.activity.toUpperCase(),sx+22,sy+3);});
         const pressure=getZoneFactionPressure(zone,factionInfluence);
         const pressureColor=pressure.status==='dominant'?'rgba(120,180,255,.75)':pressure.status==='contested'?'rgba(220,190,110,.75)':pressure.status==='weak'?'rgba(230,110,130,.8)':'rgba(160,180,210,.65)';
         sceneCtx.strokeStyle=pressureColor;sceneCtx.lineWidth=2;sceneCtx.setLineDash([6,4]);sceneCtx.strokeRect(8,8,rect.width-16,rect.height-16);sceneCtx.setLineDash([]);
@@ -586,6 +549,7 @@ function App() {
   <section className="hero"><div><span className="eyebrow">PLAYER</span><h2>{player.name}</h2><p>Level {player.level} · {player.xp} XP · {player.victories} victories · {player.arenaWins} arena wins · {player.fusionMaterials} fusion materials</p></div>{equipped&&<div className="equipped"><span className="eyebrow">EQUIPPED CARD</span><strong>{equipped.name}</strong><span>{equipped.rarity} · Lv {equipped.level}</span>{lastCardXp>0&&<small>+{lastCardXp} card XP on last victory</small>}</div>}</section>
   <section className="panel"><div><span className="eyebrow">WORLD / EXPLORATION</span><h2>{currentZone.name}</h2><p>{currentZone.description}</p><div className="world-layout"><div className="world-map"><WorldCanvas zoneId={player.zoneId} waypoint={waypoint} worldTile={worldTile} worldThreat={player.worldThreat} worldResources={player.worldResources} explorationCount={player.explorationCount} factionInfluence={activeFactionInfluence} worldEvent={worldEvent} worldEventAge={worldEventAge} remotePlayers={remotePlayers} onSignalSelect={setSelectedSignal} onTileMove={(x,y)=>{const next=moveTile(worldTile,{x,y});setWorldTile(next);update({...player,worldTile:next});setWorldMessage(next.x===x&&next.y===y?`Moved to tile ${x}, ${y}.`:`Blocked path: ${getTile(x,y).kind} tile.`)}} />{zones.map(zone=><button key={zone.id} className={zone.id===player.zoneId?'zone-node active':'zone-node'} disabled={getZoneStatus(player.level,zone,player.zoneId)==='locked'} onClick={()=>moveTo(zone.id)}><strong>{zone.name}</strong><span>Lv {zone.level} · {zone.faction}</span></button>)}</div><div className="zone-info"><p><strong>Tile:</strong> {worldTile.x}, {worldTile.y} · <strong>World:</strong> {worldMessage}</p>{waypoint&&<p><strong>Waypoint:</strong> {waypoint.x}, {waypoint.y} · <strong>Path:</strong> {pathLength} steps</p>}{nearestPoi&&<p><strong>Nearest POI:</strong> {nearestPoi.name} · distance {nearestPoi.distance}</p>}{selectedSignal&&<p><strong>Signal:</strong> {selectedSignal.name} · {selectedSignal.type.toUpperCase()} · {selectedSignal.x}, {selectedSignal.y}</p>}{nearestNpc.npc&&<p><strong>Nearest faction NPC:</strong> {nearestNpc.npc.name} · {nearestNpc.npc.activity} · distance {nearestNpc.distance}{getNpcMemory(nearestNpc.npc.id)&&<> · Trust {getNpcMemory(nearestNpc.npc.id)!.trust} · {getNpcMemory(nearestNpc.npc.id)!.affinity}</>}</p>}{selectedSignal&&<div className="signal-actions"><button type="button" onClick={()=>{setWaypoint({x:selectedSignal.x,y:selectedSignal.y});setAutoMove(true);setWorldMessage('Waypoint set: '+selectedSignal.name);}}>Navigate to signal</button>{selectedSignal.type==='npc'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>2} onClick={()=>{const npc=zoneNpcs.find(n=>n.x===selectedSignal.x&&n.y===selectedSignal.y);if(!npc)return;const result=interactWithNpc(npc,player.worldThreat,player.worldResources);const next=applyNpcInteraction(player,npc.faction as Faction,result.action,npc.id);update(next);setWorldMessage(result.message);setSelectedSignal(null);}}>{Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)<=2?'Resolve NPC action':'Move closer'}</button>}{selectedSignal.type==='event'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const next=applyWorldEventState(player,worldEvent.effect,worldEvent.intensity,worldEvent.faction);update(next);setWorldEvent(generateWorldEvent(currentZone,next.worldThreat,next.worldResources,next.explorationCount,activeFactionInfluence));setWorldMessage('World event resolved: '+worldEvent.title);setWorldEventAge(0);setWaypoint(null);setAutoMove(false);setSelectedSignal(null);}}>Resolve event</button>}{selectedSignal.type==='poi'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const poiIndex=currentZone.pointsOfInterest.findIndex(name=>name===selectedSignal.name);if(poiIndex<0)return;const interaction=interactWithPoi(currentZone,poiIndex);if(!interaction)return;const modifiers=getZoneDynamicModifiers(currentZone,player.worldThreat,player.worldResources,player.factionStates.find(f=>f.faction===player.faction)?.influence??100);const next=applyPoiReward(player,interaction.action,{resourceYield:modifiers.resourceYield,encounterChance:modifiers.encounterChance},currentZone.id+':'+poiIndex);update(next);setPoiMessage('POI resolved: '+interaction.name);setPoiAction(interaction.action);setSelectedSignal(null);setWorldMessage('POI action resolved: '+interaction.action);}}>{worldTile.x===selectedSignal.x&&worldTile.y===selectedSignal.y?'Resolve POI action':'Move to POI'}</button>}</div>}{nearestNpc.npc&&<button type="button" disabled={nearestNpc.distance>2} onClick={()=>{const result=interactWithNpc(nearestNpc.npc,player.worldThreat,player.worldResources);update(applyNpcInteraction(player,nearestNpc.npc.faction as Faction,result.action,nearestNpc.npc.id));setWorldMessage(result.message);}}>{nearestNpc.distance<=2?'Interact with NPC':'Move closer to interact'}</button>}{poiMessage&&<p><strong>Discovery:</strong> {poiMessage} · <strong>Action:</strong> {poiAction}</p>}<p><strong>Faction:</strong> {currentZone.faction} · <strong>Required level:</strong> {currentZone.level}</p><p><strong>Points of interest:</strong> {currentZone.pointsOfInterest.join(' · ')}</p><div className="actions"><button onClick={doExplore}>Explore this zone</button><button onClick={startCombat} disabled={combat?.status==='active'}>Enter combat</button></div>{player.lastDiscovery&&<p><strong>Latest discovery:</strong> {player.lastDiscovery}</p>}</div></div></div></section>
   <GraphicsStudio />
+  <CharacterStudio />
   <section className="panel"><div><span className="eyebrow">ARENA / COMBAT</span><h2>{combat?combat.enemy.name:'No active encounter'}</h2>{!combat&&<p>Start an arena encounter from the current zone.</p>}{combat&&<><p><strong>You:</strong> {combat.player.hp}/{combat.player.maxHp} HP · ATK {combat.player.attack} · DEF {combat.player.defense}</p><p><strong>Enemy:</strong> {combat.enemy.hp}/{combat.enemy.maxHp} HP · ATK {combat.enemy.attack} · DEF {combat.enemy.defense}</p><div className="actions">{combat.status==='active'&&<button onClick={attack} disabled={combat.turn!=='player'}>Attack</button>}{combat.status!=='active'&&<button onClick={()=>setCombat(null)}>Leave encounter</button>}</div><p>{combat.log.slice(-3).join(' · ')}</p>{combat.status==='victory'&&<><p><strong>RPGQG reward:</strong> +{getCombatReward(combat)} XP + 1 card.</p><p><strong>Combat summary:</strong> {getCombatSummary(combat).rounds} rounds · {getCombatSummary(combat).damageDealt} damage dealt · {getCombatSummary(combat).damageTaken} damage taken.</p></>}{combat.status==='defeat'&&<p><strong>Defeat.</strong> No card reward granted.</p>}</>}</div></section>
   <section className="panel"><div><span className="eyebrow">TRAVEL</span><h2>Reachable zones</h2></div><div className="actions">{getReachableZones(player.zoneId).map(zone=><button key={zone.id} disabled={!canEnterZone(player.level,zone)} onClick={()=>moveTo(zone.id)}>{zone.name} · Lv {zone.level}</button>)}</div><p>World zones: {zones.length}</p></section>
   <section className="panel"><div><span className="eyebrow">FACTION</span><h2>Choose your allegiance</h2></div><div className="actions">{factions.map(f=><button className={player.faction===f?'selected':''} key={f} onClick={()=>chooseFaction(f)}>{f}</button>)}</div><p>Current faction: <strong>{player.faction}</strong></p></section>
