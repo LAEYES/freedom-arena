@@ -356,7 +356,7 @@ export default {
             if (duplicate) return json({ outcome: parseObject(duplicate.outcome_json), replayed: true });
             return json({ error: "world_command_conflict" }, 409);
           }
-          return json({ outcome, replayed: false });
+          return json({ outcome: { ...outcome, loot }, replayed: false });
         } catch {
           return json({ error: "world_command_failed" }, 500);
         }
