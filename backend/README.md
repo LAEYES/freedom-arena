@@ -173,3 +173,27 @@ Authenticated clients equip or unequip with `POST /world/:zoneId/equip`:
 Set `cardId` to `null` to unequip. The server checks ownership, zone presence, slot compatibility, duplicate use and the expected loadout revision. D1 stores the loadout update and idempotency record in one batch. A stale revision returns HTTP 409; clients should reload the loadout and retry with a new command ID. The command never accepts client-supplied stats.
 
 Combat aggregates bounded power, defense and vitality from all equipped cards; the weapon card supplies the active card ability and resistances. Health maximum and recovery use the same aggregate stat builder. Apply migration 007 before deploying this Worker. No remote migration, deployment or merge is performed by this PR.
+
+
+## FA-WORLD-041 inventory, combat loot and transaction ledger
+
+For existing D1 databases, apply migration 008 after migrations 002–007:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/008_fa_world_041_inventory.sql
+```
+
+The normalized `world_inventory` table stores one row per player/item with a quantity constraint from 0 to 999. `world_inventory_log` is an append-only transaction ledger with unique command IDs. Fresh databases receive both tables from `schema.sql`.
+
+A successful server-resolved PvE victory may grant items from a fixed server-owned loot table: `scrap_metal`, `arcane_shard` and `medicinal_herb`. Drop probabilities and quantities are calculated from server-generated random values; clients cannot request an item, set a quantity or submit a drop roll. Defeats grant no item loot. Player XP, health, combat command result, inventory increments and item-ledger entries are committed in one D1 batch. The combat response includes the granted loot, and retrying the same combat command ID returns the recorded result without granting items twice.
+
+Read the authenticated player's inventory and latest 30 item transactions with `GET /world/:zoneId/inventory`. The player must have active presence in that zone. The API currently exposes server-generated PvE loot and read-only inventory; player-to-player trading, marketplace listings, crafting consumption and item transfers are not enabled in this increment. Inventory capacity is capped at 999 units per item; overflow is not intended as a storage mechanism and should be handled by future reward-capacity rules.
+
+Run backend validation from `backend/`:
+
+```bash
+npm run check
+npm test
+```
+
+Apply migration 008 before deploying this Worker. No remote migration, deployment or PR merge is performed by this change.
