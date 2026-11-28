@@ -412,3 +412,128 @@ export function buildLandmarkMesh(tile: TerrainTile, kind: LandmarkKind): Float3
   }
   return new Float32Array(output);
 }
+
+
+
+export type RoadCoordinate = { i: number; j: number };
+
+/** Low-profile stylized road strips for a cardinal navigation path. Visual only. */
+export function buildRoadMesh(
+  tiles: readonly TerrainTile[],
+  route: readonly RoadCoordinate[],
+): Float32Array {
+  const output: number[] = [];
+  const byKey = new Map(tiles.map(tile => [tile.i + ':' + tile.j, tile]));
+  const roadColors: Partial<Record<TerrainTile['kind'], RGB>> = {
+    grass: [0.48, 0.39, 0.27],
+    forest: [0.35, 0.29, 0.22],
+    sand: [0.69, 0.54, 0.34],
+    snow: [0.62, 0.67, 0.69],
+  };
+
+  for (let index = 0; index < route.length; index++) {
+    const point = route[index];
+    const tile = byKey.get(point.i + ':' + point.j);
+    if (!tile?.walkable) continue;
+    const previous = route[index - 1];
+    const next = route[index + 1];
+    const horizontal = (previous && previous.j === point.j) || (next && next.j === point.j);
+    const vertical = (previous && previous.i === point.i) || (next && next.i === point.i);
+    const width = 0.40;
+    const length = 0.94;
+    const ground = terrainWorldHeight(tile) + 0.026;
+    const color = roadColors[tile.kind] ?? [0.42, 0.34, 0.25];
+    pushBox(output, { x: point.i + 0.5, y: point.j + 0.5, z: ground }, {
+      width: horizontal && !vertical ? length : width,
+      depth: vertical && !horizontal ? length : width,
+      height: 0.035,
+    }, color);
+  }
+  return new Float32Array(output);
+}
+
+/** Vertical exposed faces where a tile is higher than its cardinal neighbor. */
+export function buildTerrainCliffMesh(tiles: readonly TerrainTile[]): Float32Array {
+  const output: number[] = [];
+  const byKey = new Map(tiles.map(tile => [tile.i + ':' + tile.j, tile]));
+  const directions = [
+    { di: 0, dj: -1, edge: 'north' },
+    { di: 1, dj: 0, edge: 'east' },
+    { di: 0, dj: 1, edge: 'south' },
+    { di: -1, dj: 0, edge: 'west' },
+  ] as const;
+
+  for (const tile of tiles) {
+    const highZ = terrainWorldHeight(tile);
+    for (const direction of directions) {
+      const neighbor = byKey.get((tile.i + direction.di) + ':' + (tile.j + direction.dj));
+      if (!neighbor || tile.elevation <= neighbor.elevation) continue;
+      const lowZ = terrainWorldHeight(neighbor);
+      const color = shade(TERRAIN_PALETTE[tile.kind], 0.50);
+      let a: WorldPosition;
+      let b: WorldPosition;
+      if (direction.edge === 'north') {
+        a = { x: tile.i, y: tile.j, z: lowZ };
+        b = { x: tile.i + 1, y: tile.j, z: lowZ };
+      } else if (direction.edge === 'east') {
+        a = { x: tile.i + 1, y: tile.j, z: lowZ };
+        b = { x: tile.i + 1, y: tile.j + 1, z: lowZ };
+      } else if (direction.edge === 'south') {
+        a = { x: tile.i + 1, y: tile.j + 1, z: lowZ };
+        b = { x: tile.i, y: tile.j + 1, z: lowZ };
+      } else {
+        a = { x: tile.i, y: tile.j + 1, z: lowZ };
+        b = { x: tile.i, y: tile.j, z: lowZ };
+      }
+      const topA = { ...a, z: highZ };
+      const topB = { ...b, z: highZ };
+      pushQuad(output, a, b, topB, topA, color);
+    }
+  }
+  return new Float32Array(output);
+}
+
+/**
+ * One-cell visual bridge span between two walkable banks with one water tile between.
+ * This mesh is intentionally visual-only: navigation/collision must be implemented separately.
+ */
+export function buildBridgeMesh(
+  start: TerrainTile,
+  water: TerrainTile,
+  end: TerrainTile,
+): Float32Array {
+  const output: number[] = [];
+  const dx = end.i - start.i;
+  const dy = end.j - start.j;
+  const straightSpan = (Math.abs(dx) === 2 && dy === 0) || (Math.abs(dy) === 2 && dx === 0);
+  if (!straightSpan || water.kind !== 'water' || !start.walkable || !end.walkable) return new Float32Array();
+  const sameRow = dy === 0;
+  const aligned = sameRow
+    ? water.j === start.j && water.j === end.j && water.i === (start.i + end.i) / 2
+    : water.i === start.i && water.i === end.i && water.j === (start.j + end.j) / 2;
+  if (!aligned) return new Float32Array();
+  const deckZ = Math.max(terrainWorldHeight(start), terrainWorldHeight(end)) + 0.12;
+  const center = { x: water.i + 0.5, y: water.j + 0.5, z: deckZ };
+  pushBox(output, center, {
+    width: sameRow ? 2.02 : 0.56,
+    depth: sameRow ? 0.56 : 2.02,
+    height: 0.12,
+  }, [0.43, 0.32, 0.22]);
+  for (const side of [-1, 1]) {
+    pushBox(output, {
+      x: center.x + (sameRow ? 0 : side * 0.25),
+      y: center.y + (sameRow ? side * 0.25 : 0),
+      z: deckZ + 0.18,
+    }, {
+      width: sameRow ? 2.02 : 0.07,
+      depth: sameRow ? 0.07 : 2.02,
+      height: 0.36,
+    }, [0.31, 0.34, 0.35]);
+  }
+  for (const bank of [start, end]) {
+    pushBox(output, {
+      x: bank.i + 0.5, y: bank.j + 0.5, z: (terrainWorldHeight(bank) + deckZ) / 2,
+    }, { width: 0.12, depth: 0.12, height: Math.max(0.12, deckZ - terrainWorldHeight(bank)) }, [0.36, 0.37, 0.37]);
+  }
+  return new Float32Array(output);
+}
