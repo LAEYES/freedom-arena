@@ -22,6 +22,8 @@ import {
 import {
   buildAvatarMesh,
   buildTerrainMesh,
+  buildTerrainCliffMesh,
+  buildRoadMesh,
   pickNearestTerrainTile,
   terrainWorldHeight,
   buildNpcMesh,
@@ -195,11 +197,24 @@ export function World3DCanvas({
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
+    append(buildTerrainCliffMesh(terrainMap.tiles));
     append(buildWorldDressingMesh(terrainMap.tiles, terrainMap.seed));
+    const roadOrigin = getTerrainTile(terrainMap, 32, 32);
     zone.pointsOfInterest.forEach((_, index) => {
       const position = getPoiPosition(zone, index);
       const tile = getTerrainTile(terrainMap, position.x, position.y);
-      if (tile?.walkable) append(buildLandmarkMesh(tile, (['watchtower', 'shrine', 'ruins', 'gate'] as const)[index % 4]));
+      if (tile?.walkable) {
+        append(buildLandmarkMesh(tile, (['watchtower', 'shrine', 'ruins', 'gate'] as const)[index % 4]));
+        if (roadOrigin?.walkable) {
+          const route = findTerrainPath(
+            terrainMap,
+            { i: roadOrigin.i, j: roadOrigin.j, elevation: roadOrigin.elevation },
+            { i: tile.i, j: tile.j, elevation: tile.elevation },
+            { allowDiagonal: false, maxExpandedNodes: 8192 },
+          );
+          append(buildRoadMesh(terrainMap.tiles, route));
+        }
+      }
     });
     const eventPosition = getWorldEventPoint(worldEvent);
     const eventTile = getTerrainTile(terrainMap, eventPosition.x, eventPosition.y);
