@@ -7,7 +7,7 @@ This increment adds and integrates a deterministic local NPC behavior controller
 - IDLE: initialization/recovery state; transitions to PATROL.
 - PATROL: existing A* patrol route remains active until a player enters the configured alert radius.
 - ALERT: NPC becomes aware of the player and pauses its patrol; it enters CHASE when the player enters the closer chase radius.
-- CHASE: computes an orthogonal A* route toward the player's current tile and replans when the target changes or the next route tile becomes occupied.
+- CHASE: computes an orthogonal A* route toward a walkable tile adjacent to the player (never occupying the player's cell) and replans when the target changes or the next route tile becomes occupied.
 - RETURN: routes toward the NPC's original home tile after disengagement or leash-limit breach; resumes a stationary PATROL state on arrival.
 
 ## Runtime integration
@@ -15,7 +15,7 @@ This increment adds and integrates a deterministic local NPC behavior controller
 - NPCs without an active behavior agent continue using the 010D patrol simulation.
 - On proximity detection, the tactical agent is initialized at the NPC's current interpolated patrol tile.
 - Tactical poses are interpolated in the GPU render loop and are used for pointer selection.
-- Other NPC positions are supplied as dynamic blocked tiles to A*. The current player's tile is allowed as the chase destination.
+- Other NPC positions are supplied as dynamic blocked tiles to A*. The player's tile remains blocked; pursuit terminates on an adjacent walkable tile.
 - The pre-existing player movement validation callback remains the authority for player movement. NPC behavior does not trigger combat or interaction callbacks.
 
 ## Safety and determinism
