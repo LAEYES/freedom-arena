@@ -131,20 +131,32 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
     addCube(data,0,0,0.45,2.8,0.45);
     addCube(data,-0.9,0,0.22,1.8,0.22);
     addCube(data,0.9,0,0.22,1.8,0.22);
-    const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
-    const loc=gl.getAttribLocation(program,'a_position');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0);
     // Lightweight tactical actors: player beacon, POI beacons and faction markers.
     addCube(data,0,0,0.28,0.55,0.28);
     addCube(data,-3,2,0.18,0.38,0.18);
     addCube(data,3,-1,0.18,0.48,0.18);
+
+    // Upload only after all scene geometry has been assembled.
+    const buffer=gl.createBuffer();if(!buffer)return;
+    gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
+    const loc=gl.getAttribLocation(program,'a_position');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc,3,gl.FLOAT,false,0,0);
     const matrixLoc=gl.getUniformLocation(program,'u_matrix'),timeLoc=gl.getUniformLocation(program,'u_time');
     const pxLoc=gl.getUniformLocation(program,'u_player_x'),pyLoc=gl.getUniformLocation(program,'u_player_y');
     const threatLoc=gl.getUniformLocation(program,'u_threat'),weatherLoc=gl.getUniformLocation(program,'u_weather'),cycleLoc=gl.getUniformLocation(program,'u_cycle');
 
     let raf=0;
+    let lastWidth=0,lastHeight=0;
     const draw=(time:number)=>{
       const r=canvas.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
-      canvas.width=Math.max(1,Math.floor(r.width*dpr));canvas.height=Math.max(1,Math.floor(r.height*dpr));
+      const width=Math.max(1,Math.floor(r.width*dpr));
+      const height=Math.max(1,Math.floor(r.height*dpr));
+      if(width!==lastWidth||height!==lastHeight){
+        canvas.width=width;canvas.height=height;
+        lastWidth=width;lastHeight=height;
+      }
       gl.viewport(0,0,canvas.width,canvas.height);gl.enable(gl.DEPTH_TEST);
       gl.clearColor(.01,.02,.05,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       const aspect=canvas.width/Math.max(1,canvas.height);
