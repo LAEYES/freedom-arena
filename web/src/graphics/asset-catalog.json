@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "project": "Freedom Arena",
+  "logicalGrid": 64,
+  "biomes": [
+    "temperate",
+    "arid",
+    "frozen",
+    "volcanic",
+    "coastal"
+  ],
+  "materials": [
+    "ground",
+    "water",
+    "rock",
+    "wall",
+    "sand",
+    "snow",
+    "lava"
+  ],
+  "tileSizes": [
+    64,
+    128,
+    256
+  ],
+  "assets": []
+}
