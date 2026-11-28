@@ -11,6 +11,8 @@ import {
   buildWeatherParticleMesh,
   buildVegetationMesh,
   buildWorldDressingMesh,
+  buildVegetationInstances,
+  buildVegetationInstanceTemplate,
   buildLandmarkMesh,
   buildTerrainCliffMesh,
   buildRoadMesh,
@@ -237,6 +239,25 @@ describe('WebGL world mesh and picking', () => {
     expect(geometryFingerprint(low)).toBe(geometryFingerprint(
       buildWorldDressingMesh(tiles, 12345, { lod: 'low' }),
     ));
+    expect(high.every(Number.isFinite) && medium.every(Number.isFinite) && low.every(Number.isFinite)).toBe(true);
+  });
+
+  it('builds compact deterministic vegetation instance records for three LOD tiers', () => {
+    const tiles = Array.from({ length: 16 * 16 }, (_, index) => ({
+      ...grass,
+      i: index % 16,
+      j: Math.floor(index / 16),
+      kind: 'forest' as const,
+    }));
+    const high = buildVegetationInstances(tiles, 777, { lod: 'high' });
+    const medium = buildVegetationInstances(tiles, 777, { lod: 'medium' });
+    const low = buildVegetationInstances(tiles, 777, { lod: 'low' });
+    expect(high.length % 7).toBe(0);
+    expect(high.length).toBeGreaterThan(medium.length);
+    expect(medium.length).toBeGreaterThan(low.length);
+    expect(high).toEqual(buildVegetationInstances(tiles, 777, { lod: 'high' }));
+    expect(buildVegetationInstanceTemplate().length % 6).toBe(0);
+    expect(buildVegetationInstanceTemplate().every(Number.isFinite)).toBe(true);
     expect(high.every(Number.isFinite) && medium.every(Number.isFinite) && low.every(Number.isFinite)).toBe(true);
   });
 
