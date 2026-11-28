@@ -201,7 +201,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const pvpRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/pvp\\/(queue|status|cancel|rating)$/);
+    const pvpRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/pvp\/(queue|status|cancel|rating)$/);
     if (pvpRoute) {
       const zoneId = pvpRoute[1], action = pvpRoute[2], playerId = identity.subject;
       if (request.method === "POST" && action === "queue") {
@@ -281,7 +281,7 @@ export default {
       return json({error:"method_not_allowed"},405);
     }
 
-    const pvpMatchRoute = url.pathname.match(/^\\/pvp\\/matches\\/([a-f0-9-]{36})\\/(state|action|forfeit)$/i);
+    const pvpMatchRoute = url.pathname.match(/^\/pvp\/matches\/([a-f0-9-]{36})\/(state|action|forfeit)$/i);
     if (pvpMatchRoute) {
       const matchId = pvpMatchRoute[1], action = pvpMatchRoute[2], playerId = identity.subject;
       try {
