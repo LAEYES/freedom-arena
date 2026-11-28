@@ -2,6 +2,7 @@ import type { ScreenPosition, WorldPosition } from './coordinates';
 import type { IsometricCamera } from './isometricCamera';
 import { projectWorldToScreen } from './isometricCamera';
 import type { TerrainTile } from './terrain';
+import type { SettlementStructureKind } from './settlements';
 import { STYLIZED_TERRAIN_PALETTE } from './worldStyle';
 import type { RGB as WorldRGB } from './worldStyle';
 import { getBiomeStyle, worldPlacementSample } from './worldStyle';
@@ -428,6 +429,49 @@ export function buildVegetationInstanceTemplate(): Float32Array {
   return new Float32Array(output);
 }
 
+
+
+/** Compact settlement lot mesh; gameplay identity remains in settlements.ts. */
+export function buildSettlementStructureMesh(
+  tile: TerrainTile,
+  kind: SettlementStructureKind,
+): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.5;
+  const y = tile.j + 0.5;
+  const z = terrainWorldHeight(tile) + 0.025;
+  const wall: RGB = kind === 'hall' ? [0.62, 0.55, 0.40]
+    : kind === 'market' ? [0.66, 0.43, 0.24]
+    : kind === 'workshop' ? [0.43, 0.48, 0.52]
+    : kind === 'watchpost' ? [0.39, 0.48, 0.43]
+    : [0.58, 0.49, 0.39];
+  const roof: RGB = kind === 'hall' ? [0.34, 0.42, 0.53]
+    : kind === 'market' ? [0.68, 0.31, 0.19]
+    : kind === 'workshop' ? [0.28, 0.33, 0.37]
+    : kind === 'watchpost' ? [0.29, 0.37, 0.32]
+    : [0.43, 0.30, 0.23];
+  pushBox(output, { x, y, z: z + 0.08 }, { width: 0.94, depth: 0.88, height: 0.16 }, [0.30, 0.31, 0.30]);
+  const bodyHeight = kind === 'watchpost' ? 0.92 : kind === 'hall' ? 0.78 : 0.62;
+  pushBox(output, { x, y, z: z + 0.16 + bodyHeight / 2 }, {
+    width: kind === 'hall' ? 0.72 : 0.68,
+    depth: kind === 'workshop' ? 0.62 : 0.68,
+    height: bodyHeight,
+  }, wall);
+  if (kind === 'watchpost') {
+    pushBox(output, { x, y, z: z + 0.16 + bodyHeight + 0.10 }, { width: 0.92, depth: 0.92, height: 0.20 }, roof);
+    pushPyramid(output, { x, y, z: z + 1.18 }, 0.50, z + 1.18, 0.42, roof);
+  } else {
+    pushPyramid(output, { x, y, z: z + 0.16 + bodyHeight }, 0.49, z + 0.16 + bodyHeight, 0.46, roof);
+  }
+  const doorColor: RGB = [0.20, 0.16, 0.12];
+  pushBox(output, { x, y: y - 0.345, z: z + 0.28 }, { width: 0.20, depth: 0.035, height: 0.40 }, doorColor);
+  if (kind === 'market') {
+    pushBox(output, { x: x + 0.43, y, z: z + 0.35 }, { width: 0.22, depth: 0.52, height: 0.08 }, [0.76, 0.63, 0.34]);
+  } else if (kind === 'workshop') {
+    pushBox(output, { x: x + 0.40, y: y + 0.12, z: z + 0.28 }, { width: 0.16, depth: 0.18, height: 0.28 }, [0.25, 0.29, 0.32]);
+  }
+  return new Float32Array(output);
+}
 
 export type LandmarkKind = 'watchtower' | 'shrine' | 'ruins' | 'gate';
 
