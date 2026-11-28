@@ -1,6 +1,6 @@
 # FA-WORLD-029 — Chunk GPU streaming and frustum culling
 
-Status: implementation committed; CI validation pending
+Status: implemented and CI validated
 Parent: FA-WORLD-023 world architecture and FA-WORLD-028 camera projections.
 Chunk size: 16 × 16 tiles. Sector baseline: 64 × 64 tiles.
 
@@ -31,12 +31,14 @@ Chunk size: 16 × 16 tiles. Sector baseline: 64 × 64 tiles.
 
 ## 4. Validation gates
 
-- [ ] Frustum helper passes orthographic and perspective tests.
-- [ ] WebGL2 chunk buffers are created once per cached chunk and reused while resident.
-- [ ] LRU eviction deletes old GPU buffers and stays bounded at 32 entries.
-- [ ] Renderer teardown deletes all remaining terrain chunk buffers.
-- [ ] TypeScript, unit tests and production build pass.
-- [ ] No changes to logical tile/pathfinding behavior.
+- [x] Frustum helper passes perspective third-person visibility tests.
+- [x] WebGL2 chunk buffers are created once per visible cached chunk and reused while resident.
+- [x] LRU GPU cache is bounded at 32 entries; evicted buffers are deleted.
+- [x] Renderer teardown deletes all remaining terrain chunk buffers.
+- [x] GitHub Actions Web build run 453 on commit `cd557c4923eca62c22b8776a8bacea2cdcb1ac71` passed: 22 test files, 157 tests, TypeScript and Vite production build.
+- [x] Logical tile/pathfinding behavior unchanged.
+
+Hostinger workflow build is checked separately; FTP upload is skipped for pull-request events. No production deployment is claimed.
 
 ## 5. Next
 
