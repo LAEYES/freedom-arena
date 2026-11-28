@@ -55,19 +55,16 @@ export async function verifySupabaseBearer(request: Request, env: AuthEnv): Prom
     const jwks = await getJwks(configuredIssuer);
     const jwk = jwks.find(key => (key as JsonWebKey & { kid?: string }).kid === header.kid);
     if (!jwk) return null;
-    const algorithm: AlgorithmIdentifier | EcdsaParams = header.alg === 'ES256'
+    const algorithm: AlgorithmIdentifier | EcKeyImportParams | RsaHashedImportParams = header.alg === 'ES256'
       ? { name: 'ECDSA', namedCurve: 'P-256' }
       : { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
     const verifyAlgorithm: AlgorithmIdentifier | EcdsaParams = header.alg === 'ES256'
       ? { name: 'ECDSA', hash: 'SHA-256' }
       : { name: 'RSASSA-PKCS1-v1_5' };
     const key = await crypto.subtle.importKey('jwk', jwk, algorithm, false, ['verify']);
-    const valid = await crypto.subtle.verify(
-      verifyAlgorithm,
-      key,
-      decodeBase64Url(parts[2]),
-      new TextEncoder().encode(parts[0] + '.' + parts[1]),
-    );
+    const signature = Uint8Array.from(decodeBase64Url(parts[2])).buffer;
+    const signedData = new TextEncoder().encode(parts[0] + '.' + parts[1]).buffer;
+    const valid = await crypto.subtle.verify(verifyAlgorithm, key, signature, signedData);
     return valid ? { subject: claims.sub, issuer: configuredIssuer, expiresAt: claims.exp } : null;
   } catch {
     return null;
