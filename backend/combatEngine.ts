@@ -78,9 +78,8 @@ export function resolveCombatEncounter(
 
   let playerHp = playerBase.maxHp;
   let enemyHp = enemy.maxHp;
-  let playerGuard = 0;
   let enemyExposed = 0;
-  let burn = 0;
+  let enemyGuard = 0;
   const turns: CombatTurn[] = [];
   const playerFirst = playerBase.speed >= enemy.speed;
   const maxRounds = 12;
@@ -93,30 +92,29 @@ export function resolveCombatEncounter(
       if (actor === "player") {
         const useSkill = round % 3 === 0 && rollAt(rolls, round * 2) > 0.25;
         if (useSkill) {
-          const damage = clamp(Math.max(1, Math.floor((playerBase.attack * 1.55 - enemy.defense * 0.45) * (enemyExposed ? 1.25 : 1))), 1, 900);
+          const damage = clamp(Math.max(1, Math.floor((playerBase.attack * 1.55 - enemy.defense * 0.45 - enemyGuard) * (enemyExposed ? 1.25 : 1))), 1, 900);
           enemyHp = Math.max(0, enemyHp - damage);
           enemyExposed = 1;
+          enemyGuard = 0;
           turns.push({ turn: round, actor, action: "skill", damage, targetHp: enemyHp, effect: "exposed" });
         } else {
           const critical = rollAt(rolls, round * 2 + 1) > 0.9;
-          const damage = clamp(Math.max(1, Math.floor((playerBase.attack * (critical ? 1.65 : 1) - enemy.defense * 0.55) * (enemyExposed ? 1.2 : 1))), 1, 800);
+          const damage = clamp(Math.max(1, Math.floor((playerBase.attack * (critical ? 1.65 : 1) - enemy.defense * 0.55 - enemyGuard) * (enemyExposed ? 1.2 : 1))), 1, 800);
           enemyHp = Math.max(0, enemyHp - damage);
           enemyExposed = 0;
+          enemyGuard = 0;
           turns.push({ turn: round, actor, action: "strike", damage, targetHp: enemyHp });
         }
+      } else if (round % 5 === 0 && rollAt(rolls, round * 3) > 0.2) {
+        enemyGuard = clamp(Math.floor(enemy.defense * 0.8), 0, 400);
+        turns.push({ turn: round, actor, action: "guard", damage: 0, targetHp: enemyHp, effect: "guard" });
       } else {
         const enemyHeavy = round % 4 === 0 && rollAt(rolls, round * 3) > 0.35;
         const rawDamage = enemy.attack * (enemyHeavy ? 1.45 : 1);
-        const damage = clamp(Math.max(1, Math.floor(rawDamage - playerBase.defense * 0.6 - playerGuard)), 1, 750);
+        const damage = clamp(Math.max(1, Math.floor(rawDamage - playerBase.defense * 0.6)), 1, 750);
         playerHp = Math.max(0, playerHp - damage);
-        playerGuard = 0;
         turns.push({ turn: round, actor, action: enemyHeavy ? "heavy_strike" : "strike", damage, targetHp: playerHp });
       }
-    }
-    if (burn > 0 && enemyHp > 0) {
-      const damage = Math.min(enemyHp, burn);
-      enemyHp -= damage;
-      turns.push({ turn: round, actor: "player", action: "skill", damage, targetHp: enemyHp, effect: "burn" });
     }
   }
 
