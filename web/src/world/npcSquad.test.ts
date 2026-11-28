@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
+import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, resolveNpcSquadLeaderHandoff, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { generateTerrainMap } from './terrain';
 
 describe('NPC squad coordination primitives', () => {
@@ -105,5 +105,17 @@ describe('local multi-squad partitioning', () => {
       { id: 'c', position: { i: 15, j: 5 }, state: 'ALERT' as const },
     ];
     expect(partitionNpcSquads(map, actors, 5)).toHaveLength(1);
+  });
+});
+
+describe('squad leader handoff', () => {
+  it('selects a deterministic replacement when the current leader is no longer eligible', () => {
+    const candidates = [
+      { id: 'npc-b', position: { i: 8, j: 8 }, state: 'ALERT' as const },
+      { id: 'npc-c', position: { i: 9, j: 8 }, state: 'CHASE' as const },
+    ];
+    expect(resolveNpcSquadLeaderHandoff('npc-a', candidates)?.id).toBe('npc-b');
+    expect(resolveNpcSquadLeaderHandoff('npc-b', candidates)).toBeNull();
+    expect(resolveNpcSquadLeaderHandoff('npc-a', [])).toBeNull();
   });
 });
