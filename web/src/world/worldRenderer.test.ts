@@ -11,6 +11,7 @@ import {
   buildWeatherParticleMesh,
   buildVegetationMesh,
   buildWorldDressingMesh,
+  buildLandmarkMesh,
   pickNearestTerrainTile,
   TERRAIN_PALETTE,
   terrainWorldHeight,
@@ -155,6 +156,17 @@ describe('WebGL world mesh and picking', () => {
     expect(Array.from(first)).toEqual(Array.from(second));
     expect(first.every(Number.isFinite)).toBe(true);
     expect(waterOnly.length).toBe(0);
+  });
+
+  it('builds finite modular landmark kits for each world landmark family', () => {
+    for (const kind of ['watchtower', 'shrine', 'ruins', 'gate'] as const) {
+      const mesh = buildLandmarkMesh(grass, kind);
+      expect(mesh.length).toBeGreaterThan(0);
+      expect(mesh.length % 6).toBe(0);
+      expect(mesh.every(Number.isFinite)).toBe(true);
+    }
+    expect(Array.from(buildLandmarkMesh(grass, 'watchtower')))
+      .toEqual(Array.from(buildLandmarkMesh(grass, 'watchtower')));
   });
 
   it('picks the nearest projected terrain tile', () => {
