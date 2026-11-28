@@ -293,6 +293,9 @@ export default {
           ).bind(identity.subject, zoneId).first<{ present: number }>();
           if (!presence) return json({ error: "player_not_in_zone" }, 403);
 
+          if (player.current_hp !== null && player.current_hp <= 0) {
+            return json({ error: "player_needs_rest", action: "POST /world/" + zoneId + "/rest" }, 409);
+          }
           const storedCards = parseJson<StoredCard[]>(player.cards, []);
           const safeCards = Array.isArray(storedCards) ? storedCards.slice(0, 500) : [];
           const randomBytes = new Uint32Array(40);
