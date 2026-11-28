@@ -13,9 +13,7 @@ describe('procedural settlement districts', () => {
     expect(first!.structures.length).toBeLessThanOrEqual(5);
     expect(new Set(first!.structures.map(item => item.tile.i + ':' + item.tile.j)).size).toBe(first!.structures.length);
     expect(first!.structures.every(item => item.tile.walkable)).toBe(true);
-    expect(first!.structures.map(item => item.interaction)).toEqual(
-      first!.structures.map(item => item.interaction),
-    );
+    expect(first!.structures.map(item => item.interaction)).toEqual(['governance', 'trade', 'craft', 'rest', 'defense']);
   });
 
   it('resolves interaction only on a structure tile', () => {
