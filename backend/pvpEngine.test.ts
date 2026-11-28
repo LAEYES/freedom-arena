@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { calculateElo, matchmakingRatingWindow, validatePvpAction } from "./pvpEngine.ts";
+import { calculateElo, matchmakingRatingWindow, validatePvpAction, pvpDamageVariance } from "./pvpEngine.ts";
 
 test("Elo favors the lower-rated player for an upset and remains bounded",()=>{
   const upset=calculateElo(900,1500,1);
@@ -36,4 +36,14 @@ test("Elo clamps both ratings at the configured minimum and maximum",()=>{
   const high=calculateElo(4000,3000,1);
   assert.ok(low.ratingA>=100&&low.ratingB<=4000);
   assert.ok(high.ratingA<=4000&&high.ratingB>=100);
+});
+
+
+test("cryptographic variance mapping stays in the half-open 0.9–1.1 interval", () => {
+  assert.equal(pvpDamageVariance(0), 0.9);
+  assert.ok(pvpDamageVariance(0x7fffffff) >= 0.9);
+  assert.ok(pvpDamageVariance(0x7fffffff) < 1.1);
+  assert.ok(pvpDamageVariance(0xffffffff) < 1.1);
+  assert.equal(pvpDamageVariance(-1), 0.9);
+  assert.equal(pvpDamageVariance(1.5), 0.9);
 });
