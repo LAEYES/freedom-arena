@@ -34,5 +34,5 @@ CREATE TABLE IF NOT EXISTS pvp_match_participants (
   match_id TEXT NOT NULL REFERENCES pvp_matches(match_id) ON DELETE CASCADE,
   player_id TEXT NOT NULL,
   PRIMARY KEY(match_id, player_id),
-  UNIQUE(player_id)
+  -- A player may have historical rows in many matches; active exclusivity is enforced separately.
 );
