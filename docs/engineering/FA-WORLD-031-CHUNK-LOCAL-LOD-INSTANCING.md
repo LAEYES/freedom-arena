@@ -1,6 +1,6 @@
 # FA-WORLD-031 — Chunk-local dressing, instancing and LOD
 
-Status: implementation committed; CI validation pending
+Status: implemented and CI validated
 Parent: FA-WORLD-029 chunk GPU terrain buffers and FA-WORLD-030 performance telemetry.
 
 ## 1. Chunk-local static decoration
@@ -42,7 +42,14 @@ Parent: FA-WORLD-029 chunk GPU terrain buffers and FA-WORLD-030 performance tele
 - Existing geometry fingerprint tests continue to cover deterministic static mesh generation.
 - CI validation pending.
 
-## 5. Limits
+## 5. CI validation
+
+- GitHub Actions Web build run 492 on commit `7a9c189c2ea2407da016c1a4ea5e56120b6a9bba` passed.
+- 25 test files passed; 169 tests passed.
+- TypeScript project build and Vite production build passed.
+- Hostinger workflow build passed; FTP upload was skipped because the event was a pull request.
+
+## 6. Limits
 
 - Vegetation uses one shared stylized foliage template; broadleaf/conifer silhouettes are not yet distinct in the instanced pass.
 - The renderer aggregates visible instance records into one dynamic buffer when the visible chunk/LOD signature changes; it is not a persistent per-chunk instance-buffer cache yet.
@@ -51,6 +58,6 @@ Parent: FA-WORLD-029 chunk GPU terrain buffers and FA-WORLD-030 performance tele
 - No screenshot pixel regression, GPU timer query, GPU-memory telemetry or real-device benchmark is claimed.
 - LOD thresholds are initial engineering defaults, not calibrated from hardware profiling.
 
-## 6. Next
+## 7. Next
 
 FA-WORLD-032: bridge traversal/navigation links, modular settlement districts and interaction parity. Follow with world streaming and MMO persistence architecture.
