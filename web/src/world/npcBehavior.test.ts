@@ -15,6 +15,18 @@ describe('local NPC tactical behavior', () => {
     expect(agent.path.length).toBeGreaterThan(1);
   });
 
+  it('holds a received group alert briefly when the player is outside local range', () => {
+    const alerted = {
+      ...createNpcBehaviorAgent('npc-alert-hold', { i: 10, j: 10 }),
+      state: 'ALERT' as const,
+      stateElapsedMs: 0,
+    };
+    const held = updateNpcBehavior(map, alerted, { i: 28, j: 28 }, 1000, { alertHoldMs: 1800 });
+    expect(held.state).toBe('ALERT');
+    const expired = updateNpcBehavior(map, held, { i: 28, j: 28 }, 900, { alertHoldMs: 1800 });
+    expect(expired.state).toBe('PATROL');
+  });
+
   it('does not acquire a player behind the NPC facing direction', () => {
     const agent = createNpcBehaviorAgent('npc-behind', { i: 10, j: 10 });
     const result = updateNpcBehavior(map, agent, { i: 6, j: 10 }, 16);
