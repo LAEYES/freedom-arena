@@ -86,7 +86,7 @@ export function resolveCombatEncounter(
     if (regeneration > 0 && playerHp > 0) {
       const healed = Math.min(playerBase.maxHp - playerHp, regeneration);
       playerHp += healed;
-      turns.push({ turn: round, actor: "player", action: "skill", damage: -healed, targetHp: playerHp, effect: "regeneration" });
+      turns.push({ turn: round, actor: "player", action: "skill", damage: 0, targetHp: playerHp, effect: "regeneration" });
     }
     for (const dot of enemyDots) {
       if (dot.remaining > 0 && enemyHp > 0) {
