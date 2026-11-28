@@ -4,10 +4,23 @@ import { ChunkManager } from './chunks';
 import { findTerrainPath } from './navigation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
+  getZone,
+  getZoneEnvironment,
+  getZoneNpcs,
+  getPoiPosition,
+  getWorldEventPoint,
+  type WorldEvent,
+} from '../world';
+import {
   buildAvatarMesh,
   buildTerrainMesh,
   pickNearestTerrainTile,
   terrainWorldHeight,
+  buildNpcMesh,
+  buildPoiBuildingMesh,
+  buildEventBeaconMesh,
+  buildBossMesh,
+  buildWeatherParticleMesh,
 } from './worldRenderer';
 
 type PlayerTile = { x: number; y: number };
@@ -15,6 +28,10 @@ type PlayerTile = { x: number; y: number };
 type World3DCanvasProps = {
   zoneId: string;
   worldTile: PlayerTile;
+  worldThreat: number;
+  worldResources: number;
+  explorationCount: number;
+  worldEvent: WorldEvent;
   onTileMove: (tileX: number, tileY: number) => boolean;
   onSwitchTo2D: () => void;
 };
@@ -64,9 +81,14 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
   const fragmentSource = `#version 300 es
     precision highp float;
     in vec3 vColor;
+    uniform vec3 uTint;
+    uniform vec3 uFogColor;
+    uniform float uFogAmount;
     out vec4 outColor;
     void main() {
-      outColor = vec4(vColor, 1.0);
+      float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
+      vec3 litColor = vColor * uTint;
+      outColor = vec4(mix(litColor, uFogColor, depthFog), 1.0);
     }
   `;
   const vertex = createShader(gl, gl.VERTEX_SHADER, vertexSource);
@@ -89,6 +111,10 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
 export function World3DCanvas({
   zoneId,
   worldTile,
+  worldThreat,
+  worldResources,
+  explorationCount,
+  worldEvent,
   onTileMove,
   onSwitchTo2D,
 }: World3DCanvasProps) {
@@ -107,6 +133,10 @@ export function World3DCanvas({
     y: worldTile.y,
     chunks: 0,
     tileCount: 0,
+    actors: 0,
+    pois: 0,
+    weather: 'mist',
+    cycle: 'day',
     status: 'Initialisation WebGL2',
   });
 
@@ -122,6 +152,39 @@ export function World3DCanvas({
     chunkSize: 16,
     maxCachedChunks: 32,
   }), [terrainMap]);
+
+  const zone = getZone(zoneId);
+  const environment = getZoneEnvironment(zone, worldThreat, worldResources, explorationCount);
+  const sceneVertices = useMemo(() => {
+    const output: number[] = [];
+    const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
+    const actors = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
+    for (const actor of actors) {
+      const tile = getTerrainTile(terrainMap, actor.x, actor.y);
+      if (tile?.walkable) append(buildNpcMesh(actor, tile));
+    }
+    zone.pointsOfInterest.forEach((_, index) => {
+      const position = getPoiPosition(zone, index);
+      const tile = getTerrainTile(terrainMap, position.x, position.y);
+      if (tile?.walkable) append(buildPoiBuildingMesh(tile, index));
+    });
+    const eventPosition = getWorldEventPoint(worldEvent);
+    const eventTile = getTerrainTile(terrainMap, eventPosition.x, eventPosition.y);
+    if (eventTile?.walkable) {
+      append(buildEventBeaconMesh(eventTile, worldEvent.intensity));
+      if (worldEvent.intensity >= 4) {
+        const bossTile = getTerrainTile(terrainMap, Math.min(59, eventPosition.x + 2), eventPosition.y);
+        if (bossTile?.walkable) append(buildBossMesh(bossTile));
+      }
+    }
+    return new Float32Array(output);
+  }, [terrainMap, zoneId, worldThreat, worldResources, explorationCount, worldEvent.id, worldEvent.intensity]);
+  const weatherVertices = useMemo(() => {
+    if (environment.weather === 'clear') return new Float32Array();
+    return buildWeatherParticleMesh(zoneSeed(zoneId) + explorationCount * 7919,
+      environment.weather === 'storm' ? 'storm' : environment.weather === 'frost' ? 'frost' : 'mist',
+      environment.weather === 'storm' ? 110 : 72);
+  }, [zoneId, explorationCount, environment.weather]);
 
   useEffect(() => { onTileMoveRef.current = onTileMove; }, [onTileMove]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -142,6 +205,8 @@ export function World3DCanvas({
     let program: WebGLProgram | null = null;
     let terrainBuffer: WebGLBuffer | null = null;
     let avatarBuffer: WebGLBuffer | null = null;
+    let sceneBuffer: WebGLBuffer | null = null;
+    let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
     let elapsedSinceMove = 0;
@@ -149,6 +214,9 @@ export function World3DCanvas({
     let positionLocation = -1;
     let colorLocation = -1;
     let matrixLocation: WebGLUniformLocation | null = null;
+    let tintLocation: WebGLUniformLocation | null = null;
+    let fogColorLocation: WebGLUniformLocation | null = null;
+    let fogAmountLocation: WebGLUniformLocation | null = null;
     let disposed = false;
 
     try {
@@ -162,7 +230,10 @@ export function World3DCanvas({
       positionLocation = gl.getAttribLocation(program, 'aPosition');
       colorLocation = gl.getAttribLocation(program, 'aColor');
       matrixLocation = gl.getUniformLocation(program, 'uViewProjection');
-      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation) {
+      tintLocation = gl.getUniformLocation(program, 'uTint');
+      fogColorLocation = gl.getUniformLocation(program, 'uFogColor');
+      fogAmountLocation = gl.getUniformLocation(program, 'uFogAmount');
+      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation) {
         throw new Error('Attributs ou uniformes WebGL2 introuvables.');
       }
 
@@ -172,7 +243,13 @@ export function World3DCanvas({
       terrainVertexCount = terrainVertices.length / 6;
       terrainBuffer = gl.createBuffer();
       avatarBuffer = gl.createBuffer();
-      if (!terrainBuffer || !avatarBuffer) throw new Error('Impossible de créer les buffers GPU.');
+      sceneBuffer = gl.createBuffer();
+      weatherBuffer = gl.createBuffer();
+      if (!terrainBuffer || !avatarBuffer || !sceneBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
+      gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, sceneVertices, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, weatherVertices, gl.STATIC_DRAW);
 
       gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, terrainVertices, gl.STATIC_DRAW);
@@ -185,7 +262,11 @@ export function World3DCanvas({
         ...current,
         chunks: initialChunks.length,
         tileCount: terrainTiles.length,
-        status: 'WebGL2 actif · 64 × 64',
+        actors: getZoneNpcs(zone, worldThreat, worldResources, explorationCount).length,
+        pois: zone.pointsOfInterest.length,
+        weather: environment.weather,
+        cycle: environment.cycle,
+        status: 'WebGL2 actif · entités 3D chargées',
       }));
       setRendererError(null);
 
@@ -232,10 +313,27 @@ export function World3DCanvas({
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(program);
         gl.uniformMatrix4fv(matrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
+        const ambient = environment.cycle === 'night' ? [0.58, 0.66, 0.88]
+          : environment.cycle === 'dawn' ? [1.0, 0.78, 0.62]
+          : environment.cycle === 'dusk' ? [0.94, 0.70, 0.60] : [1.0, 1.0, 1.0];
+        const fog = environment.weather === 'frost' ? [0.58, 0.70, 0.82]
+          : environment.weather === 'storm' ? [0.16, 0.22, 0.34]
+          : [0.30, 0.40, 0.52];
+        gl.uniform3fv(tintLocation, ambient);
+        gl.uniform3fv(fogColorLocation, fog);
+        gl.uniform1f(fogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffer);
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, terrainVertexCount);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
+        bindVertexLayout();
+        gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
+        bindVertexLayout();
+        gl.drawArrays(gl.TRIANGLES, 0, weatherVertices.length / 6);
 
         const currentPosition = positionRef.current;
         const currentTile = getTerrainTile(terrainMap, currentPosition.i, currentPosition.j)
@@ -344,6 +442,8 @@ export function World3DCanvas({
         if (gl) {
           if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
           if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
+          if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
+          if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
           if (program) gl.deleteProgram(program);
         }
       };
@@ -357,10 +457,12 @@ export function World3DCanvas({
       if (gl) {
         if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
         if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
+        if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
+        if (weatherBuffer) gl.deleteBuffer(weatherBuffer);
         if (program) gl.deleteProgram(program);
       }
     };
-  }, [terrainMap, chunkManager]);
+  }, [terrainMap, chunkManager, sceneVertices, weatherVertices]);
 
   const rotate = (delta: number) => {
     setAzimuth(current => {
@@ -387,6 +489,7 @@ export function World3DCanvas({
       <div className="world3d-hud">
         <strong>FA-WORLD · WEBGL2</strong>
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks</span>
+        <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
         <span>{hud.status}</span>
       </div>
       {rendererError && (
