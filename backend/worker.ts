@@ -1,5 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
+import { matchmakingRatingWindow } from './pvpEngine';
 import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, resolveVictoryLoot, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
@@ -177,7 +178,7 @@ export default {
           const me = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued'").bind(playerId).first<{rating:number;queued_at:string}>();
           if (!me) return json({error:"queue_state_conflict"},409);
           const waited = Math.max(0,Math.floor((Date.now()-Date.parse(me.queued_at+"Z"))/1000));
-          const ratingWindow = Math.min(800,100+Math.floor(waited/10)*50);
+          const ratingWindow = matchmakingRatingWindow(waited);
           const opponent = await env.DB.prepare("SELECT q.player_id,q.rating,q.level FROM pvp_queue q JOIN world_player_presence p ON p.player_id=q.player_id AND p.zone_id=q.zone_id WHERE q.status='queued' AND q.zone_id=? AND q.player_id<>? AND ABS(q.rating-?)<=? AND ABS(q.level-?)<=10 AND p.updated_at >= datetime('now','-90 seconds') ORDER BY q.queued_at ASC LIMIT 1").bind(zoneId,playerId,me.rating,ratingWindow,player.level).first<{player_id:string;rating:number;level:number}>();
           if (!opponent) return json({status:"queued",rating:me.rating,ratingWindow,waitSeconds:waited});
           const matchId = crypto.randomUUID();
