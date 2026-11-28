@@ -7,6 +7,7 @@ import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type Npc
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
 import { getNpcTacticalProfile } from './npcTactics';
+import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -138,6 +139,7 @@ export function World3DCanvas({
   const movementRef = useRef<MovementState | null>(null);
   const npcAgentsRef = useRef<NpcAgent[]>([]);
   const npcBehaviorAgentsRef = useRef<Array<NpcBehaviorAgent | null>>([]);
+  const npcFormationMotionsRef = useRef<Map<string, NpcFormationMotion>>(new Map());
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
   const onSignalSelectRef = useRef(onSignalSelect);
@@ -181,6 +183,7 @@ export function World3DCanvas({
   useEffect(() => {
     npcAgentsRef.current = initialNpcAgents;
     npcBehaviorAgentsRef.current = sceneNpcs.map(() => null);
+    npcFormationMotionsRef.current.clear();
   }, [initialNpcAgents, sceneNpcs]);
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
@@ -443,8 +446,57 @@ export function World3DCanvas({
                   };
                 npcBehaviorAgentsRef.current[recipientIndex] = receiveNpcAlertSignal(recipientAgent, sourceTile);
               }
+              const groupMembers = sceneNpcs
+                .map((member, memberIndex) => {
+                  if (memberIndex === index) return null;
+                  const memberAgent = npcBehaviorAgentsRef.current[memberIndex];
+                  const memberPatrol = patrolPoses[memberIndex];
+                  const memberPosition = memberAgent?.position ?? {
+                    i: Math.round(memberPatrol?.x ?? member.x),
+                    j: Math.round(memberPatrol?.y ?? member.y),
+                  };
+                  return {
+                    id: member.id,
+                    role: getNpcTacticalProfile(member.activity).role,
+                    position: memberPosition,
+                  };
+                })
+                .filter((member): member is NonNullable<typeof member> => member !== null);
+              const occupied = new Set<string>([tileKey(sourceTile.i, sourceTile.j)]);
+              for (const member of groupMembers) occupied.add(tileKey(member.position.i, member.position.j));
+              const formationPlans = planNpcFormation(
+                terrainMap, sourceTile, behaviorAgent.facing, groupMembers, occupied,
+              );
+              for (const plan of formationPlans) {
+                npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+              }
             }
             pose = getNpcBehaviorPose(behaviorAgent);
+            const formationMotion = npcFormationMotionsRef.current.get(actor.id);
+            if (formationMotion && behaviorAgent.state === 'ALERT') {
+              const advancedMotion = advanceNpcFormationMotion(formationMotion, delta);
+              const formationPose = getNpcFormationPose(advancedMotion);
+              pose = formationPose;
+              const arrived = advancedMotion.segmentIndex >= advancedMotion.path.length - 1;
+              if (arrived) {
+                const slot = advancedMotion.path[advancedMotion.path.length - 1];
+                behaviorAgent = {
+                  ...behaviorAgent,
+                  position: slot,
+                  previousPosition: slot,
+                  path: [slot],
+                  pathIndex: 0,
+                  stepElapsedMs: 0,
+                  targetKey: null,
+                };
+                npcBehaviorAgentsRef.current[index] = behaviorAgent;
+                npcFormationMotionsRef.current.delete(actor.id);
+              } else {
+                npcFormationMotionsRef.current.set(actor.id, advancedMotion);
+              }
+            } else if (formationMotion) {
+              npcFormationMotionsRef.current.delete(actor.id);
+            }
             const fromTile = getTerrainTile(terrainMap, behaviorAgent.position.i, behaviorAgent.position.j);
             const toTile = getTerrainTile(terrainMap, behaviorAgent.path[behaviorAgent.pathIndex + 1]?.i ?? behaviorAgent.position.i,
               behaviorAgent.path[behaviorAgent.pathIndex + 1]?.j ?? behaviorAgent.position.j);
