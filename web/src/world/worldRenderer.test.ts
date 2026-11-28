@@ -17,6 +17,7 @@ import {
   buildTerrainCliffMesh,
   buildRoadMesh,
   buildBridgeMesh,
+  buildSettlementStructureMesh,
   pickNearestTerrainTile,
   TERRAIN_PALETTE,
   terrainWorldHeight,
@@ -212,6 +213,17 @@ describe('WebGL world mesh and picking', () => {
     expect(bridge.every(Number.isFinite)).toBe(true);
     expect(buildBridgeMesh(bankA, { ...water, i: 1, j: 1 }, bankB).length).toBe(0);
     expect(buildBridgeMesh(bankA, water, { ...bankB, walkable: false }).length).toBe(0);
+  });
+
+  it('builds finite modular settlement structures for every interaction type', () => {
+    for (const kind of ['hall', 'market', 'workshop', 'residence', 'watchpost'] as const) {
+      const mesh = buildSettlementStructureMesh(grass, kind);
+      expect(mesh.length).toBeGreaterThan(0);
+      expect(mesh.length % 6).toBe(0);
+      expect(mesh.every(Number.isFinite)).toBe(true);
+    }
+    expect(Array.from(buildSettlementStructureMesh(grass, 'market')))
+      .toEqual(Array.from(buildSettlementStructureMesh(grass, 'market')));
   });
 
   it('keeps terrain and landmark geometry signatures deterministic', () => {
