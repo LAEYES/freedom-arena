@@ -3,6 +3,7 @@ import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
+import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -410,6 +411,7 @@ export function World3DCanvas({
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
+    let p95FrameMs = 0;
     let positionLocation = -1;
     let colorLocation = -1;
     let matrixLocation: WebGLUniformLocation | null = null;
@@ -502,6 +504,7 @@ export function World3DCanvas({
         if (delta > 0) frameTimeMonitor.add(delta);
         if (time - lastPerformanceUpdate >= 1000) {
           const performance = frameTimeMonitor.summary();
+          p95FrameMs = performance.p95Ms;
           setHud(current => current.fps === Math.round(performance.fps) && Math.abs(current.frameMs - performance.meanMs) < 0.05
             ? current
             : { ...current, fps: Math.round(performance.fps), frameMs: performance.meanMs });
@@ -513,8 +516,7 @@ export function World3DCanvas({
           return;
         }
         // Explicit quality tiers cap render-target resolution without changing simulation or world coordinates.
-        const qualityScale = graphicsQualityRef.current === 'performance' ? 1
-          : graphicsQualityRef.current === 'quality' ? 1.75 : 1.35;
+        const qualityScale = adaptiveRenderScale(graphicsQualityRef.current, p95FrameMs);
         const dpr = Math.min(window.devicePixelRatio || 1, qualityScale);
         const width = Math.max(1, Math.floor(rect.width * dpr));
         const height = Math.max(1, Math.floor(rect.height * dpr));
@@ -613,7 +615,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance, graphicsQualityRef.current);
+          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
           if (!geometry || geometry.length === 0) continue;
           const cacheKey = chunk.key + ':' + lod;
