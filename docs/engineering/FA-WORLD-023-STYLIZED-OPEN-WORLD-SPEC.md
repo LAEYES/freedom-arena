@@ -106,7 +106,8 @@ FA-WORLD-023: approve this visual/technical baseline.
 FA-WORLD-024: asset taxonomy, manifest schema and placeholder inventory.
 FA-WORLD-025: biome/terrain palettes and deterministic placement primitives.
 FA-WORLD-026: procedural low-poly biome dressing integrated into the WebGL2 scene buffer.
-FA-WORLD-027A: modular low-poly POI landmark kits (watchtower, shrine, ruins, gate).\nFA-WORLD-027B: terrain-edge transitions, roads, bridges and settlement kits with navigation parity.
+FA-WORLD-027A: modular low-poly POI landmark kits (watchtower, shrine, ruins, gate).
+FA-WORLD-027B: A*-aligned POI roads, exposed cliff faces and a visual-only one-tile bridge primitive; bridge traversal and settlement districts remain deferred.
 FA-WORLD-028: hybrid camera controller and interaction parity.
 FA-WORLD-029: chunk-local asset buffers, LOD, batching, culling and profiling.
 FA-WORLD-030: visual regression, functional and performance validation.
