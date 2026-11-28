@@ -182,20 +182,35 @@ const FACTION_COLORS: Record<WorldActorVisual['faction'], RGB> = {
   Neutral: [0.70, 0.76, 0.82],
 };
 
-/** Build a compact humanoid faction NPC with faction-coded armor. */
-export function buildNpcMesh(actor: WorldActorVisual, groundTile: TerrainTile): Float32Array {
+/** Stable per-actor phase offset; independent of render order and frame rate. */
+export function npcAnimationPhase(actorId: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < actorId.length; index++) {
+    hash ^= actorId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) / 4294967296) * Math.PI * 2;
+}
+
+export type NpcAnimation = { phase?: number; amount?: number };
+
+/** Build a compact humanoid faction NPC with faction-coded armor and procedural idle/patrol gait. */
+export function buildNpcMesh(actor: WorldActorVisual, groundTile: TerrainTile, animation: NpcAnimation = {}): Float32Array {
   const output: number[] = [];
   const x = actor.x + 0.5;
   const y = actor.y + 0.5;
   const z = terrainWorldHeight(groundTile) + 0.015;
   const armor = FACTION_COLORS[actor.faction];
   const cloth: RGB = actor.role === 'mystic' ? [0.24, 0.16, 0.42] : [0.15, 0.20, 0.28];
-  pushBox(output, { x, y, z: z + 0.52 }, { width: 0.28, depth: 0.24, height: 0.43 }, armor);
-  pushBox(output, { x, y, z: z + 0.88 }, { width: 0.23, depth: 0.23, height: 0.22 }, [0.82, 0.68, 0.53]);
-  pushBox(output, { x: x - 0.19, y, z: z + 0.52 }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
-  pushBox(output, { x: x + 0.19, y, z: z + 0.52 }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
-  pushBox(output, { x: x - 0.085, y, z: z + 0.18 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
-  pushBox(output, { x: x + 0.085, y, z: z + 0.18 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
+  const amount = Math.max(0, Math.min(1, animation.amount ?? 0));
+  const swing = Math.sin(animation.phase ?? 0) * 0.11 * amount;
+  const bob = Math.abs(Math.sin((animation.phase ?? 0) * 2)) * 0.025 * amount;
+  pushBox(output, { x, y, z: z + 0.52 + bob }, { width: 0.28, depth: 0.24, height: 0.43 }, armor);
+  pushBox(output, { x, y, z: z + 0.88 + bob }, { width: 0.23, depth: 0.23, height: 0.22 }, [0.82, 0.68, 0.53]);
+  pushBox(output, { x: x - 0.19, y: y - swing, z: z + 0.52 + bob }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
+  pushBox(output, { x: x + 0.19, y: y + swing, z: z + 0.52 + bob }, { width: 0.10, depth: 0.12, height: 0.36 }, shade(armor, 0.78));
+  pushBox(output, { x: x - 0.085, y: y + swing, z: z + 0.18 + bob * 0.3 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
+  pushBox(output, { x: x + 0.085, y: y - swing, z: z + 0.18 + bob * 0.3 }, { width: 0.11, depth: 0.13, height: 0.28 }, cloth);
   return new Float32Array(output);
 }
 
