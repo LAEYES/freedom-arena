@@ -3,6 +3,7 @@ import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
+import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -208,6 +209,9 @@ export function World3DCanvas({
   const zoomRef = useRef(1);
   const azimuthRef = useRef(Math.PI / 4);
   const cameraModeRef = useRef<'isometric' | 'thirdPerson'>('isometric');
+  const [graphicsQuality, setGraphicsQuality] = useState<'performance' | 'balanced' | 'quality'>('balanced');
+  const graphicsQualityRef = useRef<'performance' | 'balanced' | 'quality'>('balanced');
+  graphicsQualityRef.current = graphicsQuality;
   const [zoom, setZoom] = useState(1);
   const [azimuth, setAzimuth] = useState(Math.PI / 4);
   const [cameraMode, setCameraMode] = useState<'isometric' | 'thirdPerson'>('isometric');
@@ -407,6 +411,7 @@ export function World3DCanvas({
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
+    let p95FrameMs = 0;
     let positionLocation = -1;
     let colorLocation = -1;
     let matrixLocation: WebGLUniformLocation | null = null;
@@ -499,6 +504,7 @@ export function World3DCanvas({
         if (delta > 0) frameTimeMonitor.add(delta);
         if (time - lastPerformanceUpdate >= 1000) {
           const performance = frameTimeMonitor.summary();
+          p95FrameMs = performance.p95Ms;
           setHud(current => current.fps === Math.round(performance.fps) && Math.abs(current.frameMs - performance.meanMs) < 0.05
             ? current
             : { ...current, fps: Math.round(performance.fps), frameMs: performance.meanMs });
@@ -509,7 +515,9 @@ export function World3DCanvas({
           frameId = window.requestAnimationFrame(draw);
           return;
         }
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+        // Explicit quality tiers cap render-target resolution without changing simulation or world coordinates.
+        const qualityScale = adaptiveRenderScale(graphicsQualityRef.current, p95FrameMs);
+        const dpr = Math.min(window.devicePixelRatio || 1, qualityScale);
         const width = Math.max(1, Math.floor(rect.width * dpr));
         const height = Math.max(1, Math.floor(rect.height * dpr));
         if (canvas.width !== width || canvas.height !== height) {
@@ -607,7 +615,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance);
+          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
           if (!geometry || geometry.length === 0) continue;
           const cacheKey = chunk.key + ':' + lod;
@@ -653,7 +661,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance);
+          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           const instances = vegetationChunkInstances.get(chunk.key)?.[lod];
           if (instances?.length) {
             vegetationParts.push(instances);
@@ -1171,13 +1179,14 @@ export function World3DCanvas({
         <button type="button" title="Rotation gauche" onClick={() => rotate(-Math.PI / 12)}>↶</button>
         <button type="button" title={cameraMode === 'isometric' ? 'Passer en troisième personne' : 'Passer en caméra isométrique'} onClick={() => setCameraMode(value => value === 'isometric' ? 'thirdPerson' : 'isometric')}>{cameraMode === 'isometric' ? '3P' : 'ISO'}</button>
         <button type="button" title="Rotation droite" onClick={() => rotate(Math.PI / 12)}>↷</button>
+        <button type="button" title={`Qualité graphique : ${graphicsQuality}. Cliquer pour changer`} aria-label={`Qualité graphique ${graphicsQuality}`} onClick={() => setGraphicsQuality(value => value === 'performance' ? 'balanced' : value === 'balanced' ? 'quality' : 'performance')}>GFX · {graphicsQuality === 'performance' ? 'ÉCO' : graphicsQuality === 'quality' ? 'MAX' : 'ÉQ'}</button>
         <button type="button" title="Réinitialiser la caméra" onClick={() => { setZoom(1); setAzimuth(Math.PI / 4); setCameraMode('isometric'); }}>⌂</button>
       </div>
       <div className="world3d-hud">
         <strong>FA-WORLD · WEBGL2</strong>
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
-        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
+        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen · rendu {graphicsQuality === 'performance' ? 'économie' : graphicsQuality === 'quality' ? 'qualité' : 'équilibré'}</span>
         <span>{hud.status}</span>
       </div>
       {rendererError && (
