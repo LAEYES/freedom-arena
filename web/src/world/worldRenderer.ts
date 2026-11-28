@@ -4,6 +4,7 @@ import { projectWorldToScreen } from './isometricCamera';
 import type { TerrainTile } from './terrain';
 import { STYLIZED_TERRAIN_PALETTE } from './worldStyle';
 import type { RGB as WorldRGB } from './worldStyle';
+import { getBiomeStyle, worldPlacementSample } from './worldStyle';
 
 export type RGB = WorldRGB;
 
@@ -279,6 +280,96 @@ export function buildWeatherParticleMesh(
       depth: kind === 'storm' ? size * 3.8 : size * 1.2,
       height: kind === 'storm' ? size * 0.55 : size * 1.2,
     }, color);
+  }
+  return new Float32Array(output);
+}
+
+
+export type VegetationVariant = 'broadleaf' | 'conifer' | 'shrub';
+
+function pushPyramid(
+  output: number[],
+  center: WorldPosition,
+  radius: number,
+  baseZ: number,
+  height: number,
+  color: RGB,
+): void {
+  const a = { x: center.x - radius, y: center.y - radius, z: baseZ };
+  const b = { x: center.x + radius, y: center.y - radius, z: baseZ };
+  const c = { x: center.x + radius, y: center.y + radius, z: baseZ };
+  const d = { x: center.x - radius, y: center.y + radius, z: baseZ };
+  const apex = { x: center.x, y: center.y, z: baseZ + height };
+  pushTriangle(output, a, b, apex, shade(color, 0.92));
+  pushTriangle(output, b, c, apex, shade(color, 0.72));
+  pushTriangle(output, c, d, apex, shade(color, 0.84));
+  pushTriangle(output, d, a, apex, color);
+}
+
+function vegetationBiome(tile: TerrainTile): 'temperate_grassland' | 'temperate_forest' | 'arid' | 'alpine' {
+  if (tile.kind === 'forest') return 'temperate_forest';
+  if (tile.kind === 'sand') return 'arid';
+  if (tile.kind === 'snow') return 'alpine';
+  return 'temperate_grassland';
+}
+
+/** Procedural low-poly vegetation; placement is stable for seed + absolute tile + family. */
+export function buildVegetationMesh(
+  tile: TerrainTile,
+  variant: VegetationVariant = 'broadleaf',
+  seed = 0,
+): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.25 + worldPlacementSample(seed, tile.i, tile.j, 'vegetation-x') * 0.5;
+  const y = tile.j + 0.25 + worldPlacementSample(seed, tile.i, tile.j, 'vegetation-y') * 0.5;
+  const ground = terrainWorldHeight(tile) + 0.02;
+  const style = getBiomeStyle(vegetationBiome(tile));
+
+  if (variant === 'shrub') {
+    pushPyramid(output, { x, y, z: ground }, 0.24, ground, 0.58, style.foliage);
+  } else {
+    pushBox(output, { x, y, z: ground + 0.42 }, {
+      width: 0.13, depth: 0.13, height: 0.84,
+    }, [0.35, 0.22, 0.13]);
+    if (variant === 'conifer') {
+      pushPyramid(output, { x, y, z: ground }, 0.48, ground + 0.35, 0.95, style.foliage);
+      pushPyramid(output, { x, y, z: ground }, 0.36, ground + 0.88, 0.82, style.foliageShadow);
+      pushPyramid(output, { x, y, z: ground }, 0.22, ground + 1.34, 0.66, style.foliage);
+    } else {
+      pushPyramid(output, { x, y, z: ground }, 0.52, ground + 0.55, 1.15, style.foliage);
+      pushPyramid(output, { x: x + 0.08, y: y - 0.04, z: ground }, 0.32, ground + 1.05, 0.72, style.foliageShadow);
+    }
+  }
+  return new Float32Array(output);
+}
+
+/** Deterministic, biome-aware decorative geometry for a sector. */
+export function buildWorldDressingMesh(tiles: readonly TerrainTile[], seed: number): Float32Array {
+  const output: number[] = [];
+  for (const tile of tiles) {
+    const density = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-density');
+    const variantSample = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-variant');
+    let variant: VegetationVariant | null = null;
+    if (tile.kind === 'forest' && density < 0.34) {
+      variant = variantSample < 0.64 ? 'broadleaf' : 'conifer';
+    } else if (tile.kind === 'grass' && density < 0.075) {
+      variant = variantSample < 0.72 ? 'shrub' : 'broadleaf';
+    } else if (tile.kind === 'snow' && density < 0.055) {
+      variant = 'conifer';
+    } else if (tile.kind === 'sand' && density < 0.025) {
+      variant = 'shrub';
+    }
+
+    if (variant) {
+      const mesh = buildVegetationMesh(tile, variant, seed);
+      for (const value of mesh) output.push(value);
+    } else if (tile.kind === 'rock' && density < 0.12) {
+      const x = tile.i + 0.5;
+      const y = tile.j + 0.5;
+      const z = terrainWorldHeight(tile) + 0.04;
+      const scale = 0.65 + variantSample * 0.5;
+      pushPyramid(output, { x, y, z }, 0.25 * scale, z, 0.42 * scale, [0.47, 0.49, 0.51]);
+    }
   }
   return new Float32Array(output);
 }
