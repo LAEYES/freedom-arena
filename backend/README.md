@@ -139,3 +139,16 @@ npx wrangler d1 execute freedom-arena --remote --file=./migrations/005_fa_world_
 Fresh databases receive `players.current_hp` and `world_rest_log` from `schema.sql`. Combat now carries the persisted HP forward and writes remaining HP atomically with XP, victories, resources, threat and the idempotent combat result. A player at zero HP cannot initiate another combat, preventing repeated defeat rewards. Recovery uses `POST /world/:zoneId/rest` with `{ "commandId": "client-generated-unique-id-0002" }`; the server verifies zone presence, charges one world resource, restores HP to the maximum derived from the player's level and equipped card, and records the rest command so retries cannot charge twice. Rest is not available at full health.
 
 The API client must apply migration 005 before using the updated Worker. No remote migration or deployment is performed by this change.
+
+
+## FA-WORLD-039 card abilities, effects and resistances
+
+For existing D1 databases, apply migration 006 after migration 005:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/006_fa_world_039_status_effects.sql
+```
+
+Fresh databases include `players.status_effects`. Card records may optionally define a bounded `ability` object (`effect`: `burn`, `poison`, `weaken`, `expose`, `shield` or `regeneration`; `potency` is clamped server-side) and a `resistances` array containing supported status identifiers (`burn`, `poison`, `weaken`). The Worker continues to load all card data from the authenticated player's D1 row; clients cannot supply ability parameters or combat rolls to the command endpoint. Burn/poison deal damage over subsequent rounds, weaken reduces enemy attack, expose amplifies the next hit, shield absorbs damage, and regeneration restores health. Enemy heavy attacks can inflict a short burn; equipped-card resistance prevents it. Player status effects are normalized, capped in count/duration/potency and persisted with the combat result. A successful rest clears active negative statuses.
+
+Combat test coverage includes card abilities, resistance and bounded status persistence. Apply migration 006 before deploying this Worker revision. No migration or deployment is executed by this PR.

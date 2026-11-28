@@ -42,3 +42,24 @@ test("zero health cannot act in the combat simulation", () => {
   assert.equal(result.turns.length, 0);
   assert.equal(result.victory, false);
 });
+
+test("card ability applies a bounded damage-over-time effect", () => {
+  const result = resolveCombatEncounter(15, 10, [{ id: "burner", power: 30, ability: { id: "ember", effect: "burn", potency: 18 } }], "burner", Array(40).fill(0.5));
+  assert.ok(result.turns.some(turn => turn.effect === "burn"));
+  assert.ok(result.turns.every(turn => turn.damage >= 0 && turn.damage <= 900));
+});
+
+test("resistance prevents the corresponding persistent enemy status", () => {
+  const card = { id: "ward", power: 10, resistances: ["burn"] };
+  const result = resolveCombatEncounter(4, 30, [card], "ward", Array(40).fill(0.99));
+  assert.equal(result.remainingStatuses.some(status => status.type === "burn"), false);
+});
+
+test("incoming statuses are normalized and bounded", () => {
+  const result = resolveCombatEncounter(10, 5, [], null, Array(40).fill(0.5), 50, [
+    { type: "burn", remaining: 999, potency: 999 },
+    { type: "unknown", remaining: 2, potency: 2 },
+  ]);
+  assert.ok(result.remainingStatuses.length <= 4);
+  assert.ok(result.remainingStatuses.every(status => status.remaining <= 3 && status.potency <= 30));
+});
