@@ -68,7 +68,7 @@ export function generateSettlementDistrict(
   if (!center) return null;
 
   const candidates: TerrainTile[] = [];
-  for ( (let j = Math.max(0, center.j - 4); j <= Math.min(map.height - 1, center.j + 4); j++) {
+  for (let j = Math.max(0, center.j - 4); j <= Math.min(map.height - 1, center.j + 4); j++) {
     for (let i = Math.max(0, center.i - 4); i <= Math.min(map.width - 1, center.i + 4); i++) {
       if (Math.max(Math.abs(i - center.i), Math.abs(j - center.j)) < 2) continue;
       const tile = getTerrainTile(map, i, j);
