@@ -15,6 +15,50 @@ const FACTION_PALETTES: Record<CharacterFaction,{armor:string;light:string;dark:
   Eclipse:{armor:'#633b79',light:'#c49be7',dark:'#261a3c',glow:'#e5c6ff'},
   Neutral:{armor:'#53616b',light:'#b5c0c7',dark:'#222c35',glow:'#d8e4eb'}
 };
+
+export interface CharacterLayerProfile {
+  armorTrim: string;
+  energy: string;
+  weapon: 'blade' | 'staff';
+}
+export function getCharacterLayerProfile(faction: CharacterFaction, role: CharacterRole): CharacterLayerProfile {
+  const palette = FACTION_PALETTES[faction];
+  return { armorTrim: palette.light, energy: palette.glow, weapon: role === 'mystic' ? 'staff' : 'blade' };
+}
+export interface CharacterEffectOptions {
+  faction: CharacterFaction;
+  pose: CharacterPose;
+  role: CharacterRole;
+  frame: number;
+  size: number;
+}
+export function drawCharacterEffects(ctx: CanvasRenderingContext2D, x: number, y: number, options: CharacterEffectOptions): void {
+  if (options.pose !== 'attack') return;
+  const profile = getCharacterLayerProfile(options.faction, options.role);
+  const phase = ((Math.floor(options.frame) % 12) + 12) % 12;
+  const strength = Math.max(0, 1 - Math.abs(phase - 5) / 7);
+  if (strength <= 0) return;
+  const radius = Math.max(5, options.size * (0.34 + strength * 0.18));
+  ctx.save();
+  ctx.globalAlpha = 0.12 + strength * 0.42;
+  ctx.strokeStyle = profile.energy;
+  ctx.lineWidth = Math.max(1, options.size / 18);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (profile.weapon === 'staff') {
+    ctx.arc(x, y - options.size * 0.12, radius * 0.7, -Math.PI * 0.8, Math.PI * 0.8);
+  } else {
+    ctx.arc(x, y, radius, -Math.PI * 0.78, Math.PI * 0.12);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 0.08 + strength * 0.16;
+  ctx.fillStyle = profile.energy;
+  ctx.beginPath();
+  ctx.arc(x, y - options.size * 0.1, Math.max(2, options.size * 0.07), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function getCharacterFrameOffset(pose: CharacterPose, frame: number): number {
   const index = ((Math.floor(frame) % 4) + 4) % 4;
   if (pose === 'walk') return [0, 2, 0, -2][index];
@@ -50,6 +94,11 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   rect(light,-2,-4,4,2);rect(palette.glow,-1,-3,2,1);
   rect(armor,-7,-5,3,4);rect(armor,4,-5,3,4);
   rect(dark,-5,3,10,2);
+  // Modular armor detail layer: faction trim, belt clasp and chest insignia.
+  const layers = getCharacterLayerProfile(options.faction, options.role);
+  rect(layers.armorTrim,-4,2,8,1);
+  rect(layers.energy,-1,-2,2,2);
+  rect(dark,-1,3,2,1);
   // Arms and hands.
   rect(dark,-8,-3,3,6);rect(light,-8,1,3,2);
   rect(dark,5,-3,3,6);rect(light,5,1,3,2);
@@ -66,8 +115,9 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   ctx.translate(weaponX,weaponY);
   const angle = options.pose === 'attack' ? (-0.75 + (options.frame % 4) * 0.42) : options.role === 'mystic' ? 0.18 : -0.12;
   ctx.rotate(angle);
-  ctx.fillStyle=options.role==='mystic'?palette.glow:'#dce6f2';
-  ctx.fillRect(-unit,-2*unit,2*unit,10*unit);
+  ctx.fillStyle=layers.weapon==='staff'?palette.glow:'#dce6f2';
+  ctx.fillRect(-unit,-2*unit,2*unit,layers.weapon==='staff'?12*unit:10*unit);
+  if(layers.weapon==='staff'){ctx.fillStyle=palette.light;ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);}
   ctx.fillStyle=dark;ctx.fillRect(-3*unit,2*unit,6*unit,unit);
   ctx.restore();
   if(options.role==='vanguard'){rect(light,-6,-1,2,4);rect(light,4,-1,2,4);}
