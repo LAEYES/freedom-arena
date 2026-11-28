@@ -73,7 +73,7 @@ describe('64x64 terrain generation', () => {
   });
 
   it('exposes world bounds without mutating the map', () => {
-    const map = generateTerrainMap({ width: 32, height: 48 });
+    const map = generateTerrainMap({ width: 32, height: 48, spawnI: 16, spawnJ: 24 });
     expect(getTerrainBounds(map)).toEqual({ width: 32, height: 48 });
     expect(map.tiles).toHaveLength(1536);
   });
