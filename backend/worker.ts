@@ -184,7 +184,7 @@ export default {
           const matchId = crypto.randomUUID();
           try {
             await env.DB.batch([
-              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status) SELECT ?,?,?,?,?,?,?,?,'ready' WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,me.rating,opponent.rating,player.level,opponent.level,playerId,opponent.player_id),
+              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status,turn_deadline) SELECT ?,?,?,?,?,?,?,?,'ready',datetime('now','+45 seconds') WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,me.rating,opponent.rating,player.level,opponent.level,playerId,opponent.player_id),
               env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,playerId,matchId),
               env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,opponent.player_id,matchId),
               env.DB.prepare("INSERT INTO pvp_active_players(player_id,match_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(playerId,matchId,matchId),
