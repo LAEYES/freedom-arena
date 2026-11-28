@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test combatEngine.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
