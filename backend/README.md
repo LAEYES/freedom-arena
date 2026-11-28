@@ -297,3 +297,5 @@ At matchmaking, the Worker reads each participant's authoritative level, owned c
 The Worker records command-ID reuse across actors/matches and out-of-turn action attempts in `pvp_security_events`. Reuse returns HTTP 409 and does not expose the original command result. The security log stores event type, severity and bounded structured details. These signals are audit events, not an automated ban or collusion verdict; shared-device/network false positives and organized win-trading analysis require separate policy and evidence.
 
 Run `npm run check` and `npm test` in `backend/`. This PR does not apply migrations remotely, deploy the Worker, merge the PR, or claim production concurrency certification.
+
+<!-- FA-WORLD-046 CI rerun after type-check corrections -->
