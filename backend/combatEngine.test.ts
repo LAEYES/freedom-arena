@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { buildPlayerCombatant, resolveCombatEncounter } from "./combatEngine.ts";
+import { buildEquippedCombatant, buildPlayerCombatant, normalizeEquipment, resolveCombatEncounter } from "./combatEngine.ts";
 
 test("equipped card increases combat attributes", () => {
   const base = buildPlayerCombatant(10, null);
@@ -62,4 +62,41 @@ test("incoming statuses are normalized and bounded", () => {
   ]);
   assert.ok(result.remainingStatuses.length <= 4);
   assert.ok(result.remainingStatuses.every(status => status.remaining <= 3 && status.potency <= 30));
+});
+
+test("multi-slot equipment aggregates bounded combat attributes", () => {
+  const cards = [
+    { id: "blade", power: 35, defense: 0, vitality: 0, level: 4 },
+    { id: "plate", power: 0, defense: 28, vitality: 60, level: 3 },
+    { id: "charm", power: 12, defense: 8, vitality: 25, level: 2 },
+  ];
+  const base = buildPlayerCombatant(12, null);
+  const loadout = { weapon: "blade", armor: "plate", accessory1: "charm" };
+  const equipped = buildEquippedCombatant(12, cards, loadout);
+  assert.ok(equipped.attack > base.attack);
+  assert.ok(equipped.defense > base.defense);
+  assert.ok(equipped.maxHp > base.maxHp);
+  assert.ok(equipped.attack <= 700 && equipped.defense <= 600 && equipped.maxHp <= 2000);
+});
+
+test("loadout rejects unowned, duplicate and unknown-slot card references", () => {
+  const cards = [{ id: "one" }, { id: "two" }];
+  const loadout = normalizeEquipment({ weapon: "one", armor: "one", accessory1: "missing", unknown: "two" }, cards);
+  assert.deepEqual(loadout, { weapon: "one" });
+});
+
+test("legacy equipped card maps to weapon slot", () => {
+  const loadout = normalizeEquipment({}, [{ id: "legacy" }], "legacy");
+  assert.deepEqual(loadout, { weapon: "legacy" });
+});
+
+test("combat stats use all equipped slots while skill stays on weapon", () => {
+  const cards = [
+    { id: "weapon", power: 25, ability: { effect: "burn", potency: 10 } },
+    { id: "armor", defense: 40, vitality: 100 },
+  ];
+  const loadout = { weapon: "weapon", armor: "armor" };
+  const result = resolveCombatEncounter(10, 5, cards, "weapon", Array(40).fill(0.5), null, [], loadout);
+  assert.ok(result.player.defense > buildPlayerCombatant(10, cards[0]).defense);
+  assert.equal(result.equippedCardId, "weapon");
 });
