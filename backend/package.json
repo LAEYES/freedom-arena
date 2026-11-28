@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test combatEngine.test.ts"
+    "test": "node --experimental-strip-types --test combatEngine.test.ts enemyAI.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
