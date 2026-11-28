@@ -50,7 +50,7 @@ The migration adds:
 
 The web client keeps this integration disabled by default. After applying the schema and deploying the Worker, enable it in the Vite build with `VITE_WORLD_SYNC_ENABLED=true` and set `VITE_API_URL` to the Worker URL.
 
-The movement endpoint currently validates sector bounds, cardinal adjacency, source tile and revision. It does not yet validate terrain walkability, bridge ownership, player authentication or combat rules; it is a concurrency/persistence foundation, not an anti-cheat authority.
+The movement endpoint validates sector bounds, cardinal adjacency, source tile and revision, and recomputes terrain walkability plus the deterministic one-cell bridge rule on the Worker. Client/server terrain parity is tested across all 4096 cells. The player ID is still browser-generated and unauthenticated; identity spoofing, rate limiting, arbitrary player-state writes and combat/economy authority remain unresolved. This is still not production anti-cheat infrastructure.
 
 Cloudflare documents `d1 create`, remote `d1 execute`, and `wrangler deploy` as the standard commands for this flow.
 
