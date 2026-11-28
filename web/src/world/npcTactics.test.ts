@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNpcFormationSlot, getNpcTacticalProfile } from './npcTactics';
+import { assignNpcDynamicRoles, getNpcFormationSlot, getNpcTacticalProfile } from './npcTactics';
 
 describe('NPC tactical roles and formation geometry', () => {
   it('maps known activity metadata to stable tactical profiles', () => {
@@ -29,5 +29,32 @@ describe('NPC tactical roles and formation geometry', () => {
   it('normalizes facing and clamps invalid spacing and member index', () => {
     expect(getNpcFormationSlot({ i: 4, j: 4 }, -3, { i: 0, j: 0 }, Number.NaN))
       .toEqual({ i: 2, j: 2 });
+  });
+});
+
+describe('dynamic tactical role allocation', () => {
+  it('assigns nearest guard, farthest scout and intermediate support', () => {
+    const actors = [
+      { id: 'far', position: { i: 15, j: 10 } },
+      { id: 'near', position: { i: 2, j: 10 } },
+      { id: 'mid', position: { i: 8, j: 10 } },
+    ];
+    expect(assignNpcDynamicRoles(actors, { i: 0, j: 10 })).toEqual([
+      { id: 'near', role: 'GUARD' },
+      { id: 'mid', role: 'SUPPORT' },
+      { id: 'far', role: 'SCOUT' },
+    ]);
+    expect(assignNpcDynamicRoles([...actors].reverse(), { i: 0, j: 10 }))
+      .toEqual(assignNpcDynamicRoles(actors, { i: 0, j: 10 }));
+  });
+
+  it('keeps a single member as guard and resolves equal distances by ID', () => {
+    expect(assignNpcDynamicRoles([
+      { id: 'b', position: { i: 2, j: 0 } },
+      { id: 'a', position: { i: -2, j: 0 } },
+    ], { i: 0, j: 0 })).toEqual([
+      { id: 'a', role: 'GUARD' },
+      { id: 'b', role: 'SCOUT' },
+    ]);
   });
 });
