@@ -40,11 +40,9 @@ describe('local NPC tactical behavior', () => {
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100);
     expect(agent.state).toBe('CHASE');
-    expect(agent.path.at(-1)).not.toEqual({ i: 13, j: 10 });
-    expect(agent.path.at(-1)).toEqual(expect.objectContaining({
-      i: expect.any(Number), j: expect.any(Number),
-    }));
-    expect(Math.abs(agent.path.at(-1)!.i - 13) + Math.abs(agent.path.at(-1)!.j - 10)).toBe(1);
+    const endpoint = agent.path[agent.path.length - 1];
+    expect(endpoint.i === 13 && endpoint.j === 10).toBe(false);
+    expect(Math.abs(endpoint.i - 13) + Math.abs(endpoint.j - 10)).toBe(1);
   });
 
   it('avoids dynamically occupied tiles and replans around a blocked next step', () => {
