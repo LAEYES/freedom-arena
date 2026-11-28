@@ -111,7 +111,7 @@ FA-WORLD-027B: A*-aligned POI roads, exposed cliff faces and a visual-only one-t
 FA-WORLD-028: orthographic/perspective hybrid camera modes and third-person player follow.
 FA-WORLD-029: per-chunk terrain GPU buffers, frustum culling, bounded LRU cache and GPU buffer disposal (first pass).
 FA-WORLD-030: rolling frame-time telemetry, FPS HUD, deterministic geometry fingerprints and benchmark protocol; screenshot/pixel regression remains deferred.
-FA-WORLD-031: chunk-local world dressing, instancing, LOD tiers and GPU profiling.
+FA-WORLD-031: chunk-local decoration meshes, shared-template instanced vegetation and distance-based high/medium/low LOD tiers; GPU profiling remains pending.
 FA-WORLD-032: bridge traversal/navigation links, modular settlement districts and world interaction parity.
 
 No merge or deployment is authorized by completion of these tasks.
