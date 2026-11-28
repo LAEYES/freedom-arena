@@ -613,7 +613,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance);
+          const lod = selectWorldLod(distance, graphicsQualityRef.current);
           const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
           if (!geometry || geometry.length === 0) continue;
           const cacheKey = chunk.key + ':' + lod;
