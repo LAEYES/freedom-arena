@@ -222,6 +222,24 @@ describe('WebGL world mesh and picking', () => {
     expect(geometryFingerprint(terrainA)).not.toBe(geometryFingerprint(landmarkA));
   });
 
+  it('reduces deterministic world-dressing geometry across LOD tiers', () => {
+    const tiles = Array.from({ length: 16 * 16 }, (_, index) => ({
+      ...grass,
+      i: index % 16,
+      j: Math.floor(index / 16),
+      kind: 'forest' as const,
+    }));
+    const high = buildWorldDressingMesh(tiles, 12345, { lod: 'high' });
+    const medium = buildWorldDressingMesh(tiles, 12345, { lod: 'medium' });
+    const low = buildWorldDressingMesh(tiles, 12345, { lod: 'low' });
+    expect(high.length).toBeGreaterThan(medium.length);
+    expect(medium.length).toBeGreaterThan(low.length);
+    expect(geometryFingerprint(low)).toBe(geometryFingerprint(
+      buildWorldDressingMesh(tiles, 12345, { lod: 'low' }),
+    ));
+    expect(high.every(Number.isFinite) && medium.every(Number.isFinite) && low.every(Number.isFinite)).toBe(true);
+  });
+
   it('picks the nearest projected terrain tile', () => {
     const tiles = [
       grass,
