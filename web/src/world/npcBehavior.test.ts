@@ -18,11 +18,11 @@ describe('local NPC tactical behavior', () => {
   it('interpolates a chase step without teleporting', () => {
     let agent = createNpcBehaviorAgent('npc-b', { i: 10, j: 10 });
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
-    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 210);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 50, { stepDurationMs: 100 });
     const pose = getNpcBehaviorPose(agent);
     expect(pose.x).toBeGreaterThan(10);
     expect(pose.x).toBeLessThan(11);
-    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 210);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 50, { stepDurationMs: 100 });
     expect(Math.abs(agent.position.i - 10) + Math.abs(agent.position.j - 10)).toBe(1);
   });
 
@@ -46,9 +46,9 @@ describe('local NPC tactical behavior', () => {
   it('returns home when the player exceeds the disengagement leash', () => {
     let agent = createNpcBehaviorAgent('npc-e', { i: 10, j: 10 });
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
-    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 420);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100, { stepDurationMs: 100 });
     expect(agent.state).toBe('CHASE');
-    agent = updateNpcBehavior(map, agent, { i: 25, j: 25 }, 16);
+    agent = updateNpcBehavior(map, agent, { i: 25, j: 25 }, 16, { stepDurationMs: 100 });
     expect(agent.state).toBe('RETURN');
   });
 
