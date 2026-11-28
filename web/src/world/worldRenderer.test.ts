@@ -50,7 +50,7 @@ describe('WebGL world mesh and picking', () => {
 
   it('builds a layered stylized adventurer from fifteen low-poly armor primitives', () => {
     const mesh = buildAvatarMesh(grass);
-    expect(mesh.length).toBe(15 * 36 * 6);
+    expect(mesh.length).toBe(17 * 36 * 6);
     expect(mesh.every(Number.isFinite)).toBe(true);
   });
 
@@ -67,12 +67,13 @@ describe('WebGL world mesh and picking', () => {
     expect(walking.every(Number.isFinite)).toBe(true);
     expect(Array.from(walking)).not.toEqual(Array.from(idle));
     expect(Array.from(buildAvatarMesh(grass, {
-      phase: Math.PI / 2,
-      walkAmount: 1,
+      phase: Math.PI / 2, walkAmount: 1, action: 'run', armSwing: 0.2,
     }))).toEqual(Array.from(buildAvatarMesh(grass, {
-      phase: Math.PI / 2,
-      walkAmount: 1,
+      phase: Math.PI / 2, walkAmount: 1, action: 'run', armSwing: 0.2,
     })));
+    const attack = buildAvatarMesh(grass, { action: 'attack', armSwing: 0.58 });
+    expect(attack.length).toBe(idle.length);
+    expect(Array.from(attack)).not.toEqual(Array.from(idle));
   });
 
   it('maps terrain kinds to normalized RGB colors', () => {
@@ -90,7 +91,7 @@ describe('WebGL world mesh and picking', () => {
   it('builds faction-coded NPCs and POI structures', () => {
     const npc = buildNpcMesh({ id: 'outpost:npc:0', x: 8, y: 10, faction: 'Aegis', role: 'guard' }, grass);
     const poi = buildPoiBuildingMesh(grass, 0);
-    expect(npc.length).toBe(6 * 36 * 6);
+    expect(npc.length).toBe(7 * 36 * 6);
     expect(poi.length).toBe(4 * 36 * 6);
     expect(npc.every(Number.isFinite)).toBe(true);
     expect(poi.every(Number.isFinite)).toBe(true);
