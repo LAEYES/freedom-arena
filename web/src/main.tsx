@@ -13,6 +13,24 @@ import { equipCard, factions, fuseCards, getCardFusionCost, getEquippedCard, gra
 function isFreshRemotePresence(entry: ZonePresence) { return Date.now() - entry.updatedAt <= 15000; }
 
 const RENDER_TILE_SIZE = 64 as const;
+const RUNTIME_TEXTURE_CACHE = new Map<string, HTMLCanvasElement>();
+function drawCachedProceduralTile(ctx: CanvasRenderingContext2D, asset: ReturnType<typeof createAsset>, x: number, y: number) {
+  let texture = RUNTIME_TEXTURE_CACHE.get(asset.id);
+  if (!texture) {
+    texture = document.createElement('canvas');
+    texture.width = asset.tileSize;
+    texture.height = asset.tileSize;
+    const textureContext = texture.getContext('2d');
+    if (!textureContext) return;
+    paintProceduralTile(textureContext, asset, 0, 0);
+    RUNTIME_TEXTURE_CACHE.set(asset.id, texture);
+    if (RUNTIME_TEXTURE_CACHE.size > 512) {
+      const oldestKey = RUNTIME_TEXTURE_CACHE.keys().next().value;
+      if (oldestKey) RUNTIME_TEXTURE_CACHE.delete(oldestKey);
+    }
+  }
+  ctx.drawImage(texture, x, y);
+}
 
 function drawPixelCharacter(
   ctx: CanvasRenderingContext2D,
@@ -182,7 +200,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
           const biomeIndex = Math.floor((worldX + worldY) / 12) % 4;
           const biome: Biome = (['temperate', 'arid', 'frozen', 'volcanic', 'coastal'] as const)[biomeIndex];
           const asset = createAsset(terrain.kind, biome, worldX * 97 + worldY * 193 + biomeIndex * 17, 64);
-          paintProceduralTile(staticCtx, asset, x * tile, y * tile);
+          drawCachedProceduralTile(staticCtx, asset, x * tile, y * tile);
           if (terrain.kind !== 'ground') {
             staticCtx.strokeStyle = terrain.kind === 'wall' ? '#0b0f18' : 'rgba(7,12,20,.45)';
             staticCtx.lineWidth = 2;
