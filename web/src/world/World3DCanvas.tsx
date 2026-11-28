@@ -221,6 +221,7 @@ export function World3DCanvas({
     y: worldTile.y,
     chunks: 0,
     pendingChunks: 0,
+    streamTotal: 0,
     tileCount: 0,
     actors: 0,
     pois: 0,
@@ -493,6 +494,7 @@ export function World3DCanvas({
         ...current,
         chunks: initialChunks.length,
         pendingChunks: initialStream.pending,
+        streamTotal: initialStream.requested,
         tileCount: terrainTiles.length,
         actors: sceneNpcs.length,
         pois: zone.pointsOfInterest.length,
@@ -617,9 +619,10 @@ export function World3DCanvas({
         gl.uniform1f(chunkOpacityLocation, 1);
         const visibleTileCount = visibleChunks.reduce((sum, chunk) => sum + chunk.tiles.length, 0);
         setHud(current => current.chunks === visibleChunks.length
-          && current.pendingChunks === streamFrame.pending && current.tileCount === visibleTileCount
+          && current.pendingChunks === streamFrame.pending && current.streamTotal === streamFrame.requested
+          && current.tileCount === visibleTileCount
           ? current
-          : { ...current, chunks: visibleChunks.length, pendingChunks: streamFrame.pending, tileCount: visibleTileCount });
+          : { ...current, chunks: visibleChunks.length, pendingChunks: streamFrame.pending, streamTotal: streamFrame.requested, tileCount: visibleTileCount });
 
         const sceneLodKeys = new Set<string>();
         for (const chunk of visibleChunks) {
@@ -1215,6 +1218,9 @@ export function World3DCanvas({
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks · {hud.pendingChunks} en attente</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
         <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
+        <div className="world3d-stream-progress" role="progressbar" aria-label="Chargement progressif des chunks" aria-valuemin={0} aria-valuemax={hud.streamTotal} aria-valuenow={hud.streamTotal - hud.pendingChunks}>
+          <span style={{ width: (hud.streamTotal > 0 ? ((hud.streamTotal - hud.pendingChunks) / hud.streamTotal) * 100 : 100) + '%' }} />
+        </div>
         <span>{hud.status}</span>
       </div>
       {rendererError && (
