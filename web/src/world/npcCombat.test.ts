@@ -32,6 +32,18 @@ describe('geometric NPC engagement', () => {
     }).status).toBe('COOLDOWN');
   });
 
+  it('reports terrain occlusion before permitting engagement', () => {
+    const blockedMap = {
+      ...base,
+      tiles: base.tiles.map(tile => tile.i === 12 && tile.j === 10
+        ? { ...tile, kind: 'rock' as const, walkable: false } : tile),
+    };
+    expect(evaluateNpcEngagement(blockedMap, {
+      origin: { i: 10, j: 10 }, target: { i: 14, j: 10 },
+      facing: { i: 1, j: 0 }, range: 6,
+    }).status).toBe('OCCLUDED');
+  });
+
   it('uses deterministic unique reachable cardinal staging slots', () => {
     const target = { i: 16, j: 16 };
     const members = [
@@ -39,7 +51,8 @@ describe('geometric NPC engagement', () => {
       { id: 'npc-a', position: { i: 16, j: 12 } },
       { id: 'npc-b', position: { i: 20, j: 16 } },
     ];
-    const plans = planNpcInterceptionSlots(base, target, members);
+    const occupied = new Set(members.map(member => tileKey(member.position.i, member.position.j)));
+    const plans = planNpcInterceptionSlots(base, target, members, occupied);
     expect(plans.map(plan => plan.id)).toEqual(['npc-a', 'npc-b', 'npc-c']);
     expect(new Set(plans.map(plan => tileKey(plan.slot.i, plan.slot.j))).size).toBe(plans.length);
     for (const plan of plans) {
