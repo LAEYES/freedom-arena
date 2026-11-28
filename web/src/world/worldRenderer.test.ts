@@ -20,6 +20,7 @@ import {
   terrainWorldHeight,
 } from './worldRenderer';
 import type { TerrainTile } from './terrain';
+import { geometryFingerprint } from './worldRegression';
 
 const grass: TerrainTile = {
   i: 4, j: 7, kind: 'grass', elevation: 2, walkable: true, movementCost: 1,
@@ -209,6 +210,16 @@ describe('WebGL world mesh and picking', () => {
     expect(bridge.every(Number.isFinite)).toBe(true);
     expect(buildBridgeMesh(bankA, { ...water, i: 1, j: 1 }, bankB).length).toBe(0);
     expect(buildBridgeMesh(bankA, water, { ...bankB, walkable: false }).length).toBe(0);
+  });
+
+  it('keeps terrain and landmark geometry signatures deterministic', () => {
+    const terrainA = buildTerrainMesh([grass]);
+    const terrainB = buildTerrainMesh([{ ...grass }]);
+    const landmarkA = buildLandmarkMesh(grass, 'watchtower');
+    const landmarkB = buildLandmarkMesh({ ...grass }, 'watchtower');
+    expect(geometryFingerprint(terrainA)).toBe(geometryFingerprint(terrainB));
+    expect(geometryFingerprint(landmarkA)).toBe(geometryFingerprint(landmarkB));
+    expect(geometryFingerprint(terrainA)).not.toBe(geometryFingerprint(landmarkA));
   });
 
   it('picks the nearest projected terrain tile', () => {
