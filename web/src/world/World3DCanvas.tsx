@@ -5,6 +5,7 @@ import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
 import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { getNpcRenderDistance, shouldRenderNpc } from './renderBudget';
+import { mergeWorldMeshes } from './meshBatch';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -404,8 +405,10 @@ export function World3DCanvas({
     let vegetationMatrixLocation: WebGLUniformLocation | null = null;
     let vegetationFogColorLocation: WebGLUniformLocation | null = null;
     let vegetationFogAmountLocation: WebGLUniformLocation | null = null;
-    const terrainChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
-    const sceneChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
+    const terrainBatchBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
+    const sceneBatchBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
+    let activeTerrainBatchKey = '';
+    let activeSceneBatchKey = '';
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
     let npcBuffer: WebGLBuffer | null = null;
@@ -574,79 +577,79 @@ export function World3DCanvas({
           : { i: 32, j: 32 };
         const candidateChunks = chunkManager.loadAround(chunkCenter, activeCameraMode === 'thirdPerson' ? 1 : 4);
         const visibleChunks = candidateChunks.filter(chunk => isChunkVisibleInCamera(chunk, camera));
-        const visibleChunkKeys = new Set(visibleChunks.map(chunk => chunk.key));
-        for (const chunk of visibleChunks) {
-          let cached = terrainChunkBuffers.get(chunk.key);
-          if (!cached) {
+        // One static GPU batch for the complete visible terrain set.
+        const terrainBatchKey = visibleChunks.map(chunk => chunk.key).join('|');
+        if (terrainBatchKey !== activeTerrainBatchKey) {
+          activeTerrainBatchKey = terrainBatchKey;
+          let batch = terrainBatchBuffers.get(terrainBatchKey);
+          if (!batch) {
+            const merged = mergeWorldMeshes(visibleChunks.map(chunk => buildTerrainMesh(chunk.tiles)));
             const buffer = gl.createBuffer();
-            if (!buffer) throw new Error('Impossible de créer le buffer GPU du chunk ' + chunk.key);
-            const vertices = buildTerrainMesh(chunk.tiles);
-            cached = { buffer, vertexCount: vertices.length / 6 };
+            if (!buffer) throw new Error('Impossible de créer le buffer terrain groupé.');
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-          } else {
-            terrainChunkBuffers.delete(chunk.key);
+            gl.bufferData(gl.ARRAY_BUFFER, merged, gl.STATIC_DRAW);
+            batch = { buffer, vertexCount: merged.length / 6 };
+            terrainBatchBuffers.set(terrainBatchKey, batch);
           }
-          terrainChunkBuffers.set(chunk.key, cached);
+          while (terrainBatchBuffers.size > 4) {
+            const oldestKey = terrainBatchBuffers.keys().next().value as string | undefined;
+            if (!oldestKey || oldestKey === terrainBatchKey) break;
+            const oldest = terrainBatchBuffers.get(oldestKey);
+            if (oldest) gl.deleteBuffer(oldest.buffer);
+            terrainBatchBuffers.delete(oldestKey);
+          }
         }
-        while (terrainChunkBuffers.size > 32) {
-          const oldestKey = terrainChunkBuffers.keys().next().value as string | undefined;
-          if (!oldestKey || visibleChunkKeys.has(oldestKey)) break;
-          const oldest = terrainChunkBuffers.get(oldestKey);
-          if (oldest) gl.deleteBuffer(oldest.buffer);
-          terrainChunkBuffers.delete(oldestKey);
-        }
-        for (const chunk of visibleChunks) {
-          const cached = terrainChunkBuffers.get(chunk.key);
-          if (!cached) continue;
-          gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
+        const terrainBatch = terrainBatchBuffers.get(activeTerrainBatchKey);
+        if (terrainBatch && terrainBatch.vertexCount > 0) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, terrainBatch.buffer);
           bindVertexLayout();
-          gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
+          gl.drawArrays(gl.TRIANGLES, 0, terrainBatch.vertexCount);
         }
         const visibleTileCount = visibleChunks.reduce((sum, chunk) => sum + chunk.tiles.length, 0);
         setHud(current => current.chunks === visibleChunks.length && current.tileCount === visibleTileCount
           ? current
           : { ...current, chunks: visibleChunks.length, tileCount: visibleTileCount });
 
-        const sceneLodKeys = new Set<string>();
+        const sceneLodKeys: string[] = [];
+        const sceneGeometries: Float32Array[] = [];
         for (const chunk of visibleChunks) {
-          const reference = activeCameraMode === 'thirdPerson'
-            ? positionRef.current
-            : { i: 32, j: 32 };
+          const reference = activeCameraMode === 'thirdPerson' ? positionRef.current : { i: 32, j: 32 };
           const distance = Math.hypot(
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
           const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           const geometry = sceneChunkMeshes.get(chunk.key)?.[lod];
-          if (!geometry || geometry.length === 0) continue;
-          const cacheKey = chunk.key + ':' + lod;
-          sceneLodKeys.add(cacheKey);
-          let cached = sceneChunkBuffers.get(cacheKey);
-          if (!cached) {
+          if (!geometry?.length) continue;
+          sceneLodKeys.push(chunk.key + ':' + lod);
+          sceneGeometries.push(geometry);
+        }
+        const sceneBatchKey = sceneLodKeys.join('|');
+        if (sceneBatchKey !== activeSceneBatchKey) {
+          activeSceneBatchKey = sceneBatchKey;
+          let batch = sceneBatchBuffers.get(sceneBatchKey);
+          if (!batch) {
+            const merged = mergeWorldMeshes(sceneGeometries);
             const buffer = gl.createBuffer();
-            if (!buffer) throw new Error('Impossible de créer le buffer GPU de décor ' + cacheKey);
-            cached = { buffer, vertexCount: geometry.length / 6 };
+            if (!buffer) throw new Error('Impossible de créer le buffer décor groupé.');
             gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-            gl.bufferData(gl.ARRAY_BUFFER, geometry, gl.STATIC_DRAW);
-          } else {
-            sceneChunkBuffers.delete(cacheKey);
+            gl.bufferData(gl.ARRAY_BUFFER, merged, gl.STATIC_DRAW);
+            batch = { buffer, vertexCount: merged.length / 6 };
+            sceneBatchBuffers.set(sceneBatchKey, batch);
           }
-          sceneChunkBuffers.set(cacheKey, cached);
+          while (sceneBatchBuffers.size > 4) {
+            const oldestKey = sceneBatchBuffers.keys().next().value as string | undefined;
+            if (!oldestKey || oldestKey === sceneBatchKey) break;
+            const oldest = sceneBatchBuffers.get(oldestKey);
+            if (oldest) gl.deleteBuffer(oldest.buffer);
+            sceneBatchBuffers.delete(oldestKey);
+          }
         }
-        for (const cacheKey of sceneLodKeys) {
-          const cached = sceneChunkBuffers.get(cacheKey);
-          if (!cached) continue;
-          gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
+        const sceneBatch = sceneBatchBuffers.get(activeSceneBatchKey);
+        if (sceneBatch && sceneBatch.vertexCount > 0) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, sceneBatch.buffer);
           bindVertexLayout();
-          gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
-        }
-        while (sceneChunkBuffers.size > 32) {
-          const oldestKey = sceneChunkBuffers.keys().next().value as string | undefined;
-          if (!oldestKey || sceneLodKeys.has(oldestKey)) break;
-          const oldest = sceneChunkBuffers.get(oldestKey);
-          if (oldest) gl.deleteBuffer(oldest.buffer);
-          sceneChunkBuffers.delete(oldestKey);
+          gl.drawArrays(gl.TRIANGLES, 0, sceneBatch.vertexCount);
         }
 
         gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
@@ -1131,10 +1134,10 @@ export function World3DCanvas({
         canvas.removeEventListener('pointerdown', onPointerDown);
         canvas.removeEventListener('keydown', onKeyDown);
         if (gl) {
-          for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
-          terrainChunkBuffers.clear();
-          for (const entry of sceneChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
-          sceneChunkBuffers.clear();
+          for (const entry of terrainBatchBuffers.values()) gl.deleteBuffer(entry.buffer);
+          terrainBatchBuffers.clear();
+          for (const entry of sceneBatchBuffers.values()) gl.deleteBuffer(entry.buffer);
+          sceneBatchBuffers.clear();
           if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
           if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
           if (npcBuffer) gl.deleteBuffer(npcBuffer);
@@ -1153,10 +1156,10 @@ export function World3DCanvas({
       disposed = true;
       window.cancelAnimationFrame(frameId);
       if (gl) {
-        for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
-        terrainChunkBuffers.clear();
-        for (const entry of sceneChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
-        sceneChunkBuffers.clear();
+        for (const entry of terrainBatchBuffers.values()) gl.deleteBuffer(entry.buffer);
+        terrainBatchBuffers.clear();
+        for (const entry of sceneBatchBuffers.values()) gl.deleteBuffer(entry.buffer);
+        sceneBatchBuffers.clear();
         if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
         if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
         if (npcBuffer) gl.deleteBuffer(npcBuffer);
