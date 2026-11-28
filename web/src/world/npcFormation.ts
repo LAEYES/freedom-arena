@@ -40,10 +40,12 @@ export function planNpcFormation(
 
     let chosen: TileCoordinate | null = null;
     let path: TileCoordinate[] = [];
+    const routeBlocked = new Set(reservations);
+    routeBlocked.delete(tileKey(leader.i, leader.j));
     for (const candidate of candidates) {
       if (isTileBlocked(map, candidate.i, candidate.j, reservations)) continue;
       const route = findTerrainPath(map, leader, candidate, {
-        allowDiagonal: false, blockedTiles: reservations, maxExpandedNodes: 2048,
+        allowDiagonal: false, blockedTiles: routeBlocked, maxExpandedNodes: 2048,
       });
       if (route.length > 1) {
         chosen = candidate;
