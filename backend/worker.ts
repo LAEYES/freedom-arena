@@ -354,8 +354,10 @@ export default {
         if (combatAction==="guard") me.guard=Math.min(100,Math.floor(me.defense*0.75)+8);
         else {
           const multiplier=combatAction==="skill"?1.5:1;
-          const variance=0.9+Math.random()*0.2;
-          const raw=Math.floor(me.attack*multiplier*variance);
+          const randomWord = new Uint32Array(1);
+          crypto.getRandomValues(randomWord);
+          const variance = 0.9 + (randomWord[0] / 0x1_0000_0000) * 0.2;
+          const raw = Math.floor(me.attack * multiplier * variance);
           damage=Math.max(1,Math.min(250,raw-Math.max(0,foe.defense+foe.guard)));
           foe.hp=Math.max(0,foe.hp-damage); foe.guard=0;
         }
