@@ -1,6 +1,6 @@
 # FA-WORLD-030 — Visual regression and performance telemetry
 
-Status: implementation committed; CI validation pending
+Status: implemented and CI validated
 
 ## 1. Runtime frame-time telemetry
 
@@ -42,7 +42,14 @@ Recommended minimum: 30 seconds warm-up + 120 seconds capture, repeated three ti
 - `web/src/world/World3DCanvas.tsx`
 - `web/src/world/worldRenderer.test.ts`
 
-## 5. Limits
+## 5. CI validation
+
+- GitHub Actions Web build run 468 on commit `a6c640330eec24b989a7f5046c1b986f76869037` passed.
+- 24 test files passed; 165 tests passed.
+- TypeScript project build and Vite production build passed.
+- Hostinger workflow build passed; FTP upload was skipped because the event was a pull request.
+
+## 6. Limits
 
 - No real-device benchmark has been executed in CI.
 - No measured FPS target is claimed.
@@ -50,6 +57,6 @@ Recommended minimum: 30 seconds warm-up + 120 seconds capture, repeated three ti
 - GPU timer queries and GPU-memory telemetry are not yet implemented.
 - Current runtime HUD FPS is an average derived from rolling RAF frame deltas, not a GPU-only frame-time measurement.
 
-## 6. Next
+## 7. Next
 
 FA-WORLD-031: move vegetation, landmarks and roads into chunk-local static buffers; add instancing and LOD tiers; profile geometry and GPU buffer sizes.
