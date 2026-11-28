@@ -5,6 +5,7 @@ import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
 import { adaptiveLodQuality, adaptiveRenderScale } from './graphicsQuality';
 import { getNpcRenderDistance, shouldRenderNpc } from './renderBudget';
+import { getShadowBudget } from './vfxBudget';
 import { mergeWorldMeshes } from './meshBatch';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
@@ -28,6 +29,7 @@ import {
 } from '../world';
 import {
   buildAvatarMesh,
+  buildGroundShadowMesh,
   buildTerrainMesh,
   buildTerrainCliffMesh,
   buildRoadMesh,
@@ -1005,6 +1007,11 @@ export function World3DCanvas({
           // Rendering culling only: behavior, perception and movement above still run for every NPC.
           const renderDistance = getNpcRenderDistance(adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           if (!shouldRenderNpc({ x: pose.x, y: pose.y }, playerTile, renderDistance)) continue;
+          const shadowBudget = getShadowBudget(adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs), p95FrameMs);
+          if (index < shadowBudget) {
+            const shadow = buildGroundShadowMesh(pose.x + 0.5, pose.y + 0.5, groundZ + 0.012, 0.30, 0.20);
+            for (const value of shadow) npcOutput.push(value);
+          }
           const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount, x: pose.x, y: pose.y, groundZ });
           for (const value of mesh) npcOutput.push(value);
         }
@@ -1041,13 +1048,15 @@ export function World3DCanvas({
         const groundZ = nextTile
           ? terrainWorldHeight(currentTile) + (terrainWorldHeight(nextTile) - terrainWorldHeight(currentTile)) * progress
           : terrainWorldHeight(currentTile);
-        const avatarVertices = buildAvatarMesh(currentTile, {
+        const avatarMesh = buildAvatarMesh(currentTile, {
           x: avatarX,
           y: avatarY,
           groundZ,
           phase: time * 0.012,
           walkAmount: movementPose && nextPosition ? 1 : 0,
         });
+        const avatarShadow = buildGroundShadowMesh(avatarX, avatarY, groundZ + 0.012, 0.34, 0.24);
+        const avatarVertices = new Float32Array([...avatarShadow, ...avatarMesh]);
         gl.bindBuffer(gl.ARRAY_BUFFER, avatarBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, avatarVertices, gl.DYNAMIC_DRAW);
         bindVertexLayout();
