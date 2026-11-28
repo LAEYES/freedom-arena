@@ -61,7 +61,7 @@ export function seededRandom(seed: number): () => number {
   return () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296; };
 }
 export function createAsset(kind: MaterialKind, biome: Biome, seed: number, tileSize: 64 | 128 | 256 = 64): AssetDescriptor {
-  return { id: `fa:${biome}:${kind}:${seed >>> 0}`, kind, biome, seed: seed >>> 0, tileSize, palette: PALETTES[biome][kind], version: 1 };
+  return { id: `fa:${biome}:${kind}:${seed >>> 0}:${tileSize}`, kind, biome, seed: seed >>> 0, tileSize, palette: PALETTES[biome][kind], version: 1 };
 }
 export function tileableCellValue(seed: number, column: number, row: number, gridSize = 16): number {
   const normalizedColumn = ((column % gridSize) + gridSize) % gridSize;
