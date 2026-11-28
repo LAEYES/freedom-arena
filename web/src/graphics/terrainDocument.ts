@@ -29,8 +29,8 @@ export function createTerrainDocument(width = TERRAIN_EDITOR_WIDTH, height = TER
 export function paintTerrainCell(document: TerrainDocument, x: number, y: number, value: TerrainCell, brushSize = 1): TerrainDocument {
   if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(brushSize) || brushSize < 1 || brushSize > 8) return document;
   const cells = document.cells.slice();
-  const radius = Math.floor(brushSize / 2);
-  for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+  const start = -Math.floor((brushSize - 1) / 2);
+  for (let dy = start; dy < start + brushSize; dy++) for (let dx = start; dx < start + brushSize; dx++) {
     const px = x + dx, py = y + dy;
     if (px < 0 || py < 0 || px >= document.width || py >= document.height) continue;
     cells[py * document.width + px] = {...value};
