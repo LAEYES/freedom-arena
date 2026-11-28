@@ -309,7 +309,7 @@ Apply migration 013 after migration 012:
 npx wrangler d1 execute freedom-arena --remote --file=./migrations/013_fa_world_047_ranked_seasons.sql
 ```
 
-The global rating remains unchanged. When a match is settled while one season is active, the same Elo result is recorded in a season-scoped event ledger and applied exactly once to that season's rating table. Unique keys prevent duplicate match/player awards, and the `applied_at` marker supports safe retry. Only one active season is allowed by a partial unique index. Season creation/activation is an operator-controlled D1 action; this PR deliberately exposes no public season administration endpoint.
+The global rating remains unchanged. When a match is settled while one season is active, the match records the active season ID at matchmaking. The season event ledger stores the global Elo delta (bounded to ±64) and applies it additively to a 1000-point seasonal baseline exactly once. This preserves match attribution if settlement is delayed past a season boundary and avoids lost updates from concurrent additive awards. Unique keys prevent duplicate match/player awards, and the `applied_at` marker supports safe retry. Only one active season is allowed by a partial unique index. Season creation/activation is an operator-controlled D1 action; this PR deliberately exposes no public season administration endpoint.
 
 - `GET /world/:zoneId/pvp/leaderboard?limit=20` returns the active season and its top entries. Limit is clamped to 1–50.
 - Matches completed outside an active season still update global ratings but do not count toward a seasonal ladder.
