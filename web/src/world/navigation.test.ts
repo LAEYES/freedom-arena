@@ -35,6 +35,22 @@ describe('terrain navigation and collision', () => {
     expect(path.every(point => !(point.i === 3 && point.j < 6))).toBe(true);
   });
 
+  it('crosses only explicit bridge links and charges bridge movement cost', () => {
+    const map = makeMap(3, 1);
+    setBlocked(map, 1, 0, 'water');
+    const bridgeTiles = new Set(['1:0']);
+    expect(findTerrainPath(map, { i: 0, j: 0 }, { i: 2, j: 0 }, { allowDiagonal: false })).toEqual([]);
+    const path = findTerrainPath(map, { i: 0, j: 0 }, { i: 2, j: 0 }, {
+      allowDiagonal: false,
+      bridgeTiles,
+    });
+    expect(path.map(point => point.i + ':' + point.j)).toEqual(['0:0', '1:0', '2:0']);
+    expect(calculateTerrainPathCost(map, path, bridgeTiles)).toBeCloseTo(3.25, 10);
+    expect(canStep(map, { i: 0, j: 0 }, { i: 1, j: 0 }, new Set(), bridgeTiles)).toBe(true);
+    expect(resolveMovementStep(map, { i: 0, j: 0 }, { i: 1, j: 0 }, new Set(), bridgeTiles))
+      .toMatchObject({ i: 1, j: 0 });
+  });
+
   it('does not allow diagonal corner cutting', () => {
     const map = makeMap(3, 3);
     setBlocked(map, 1, 0);
