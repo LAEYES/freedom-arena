@@ -6,6 +6,7 @@ import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } fro
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
 import { canNpcPerceivePlayer } from './npcPerception';
 import { receiveNpcAlertSignal, resolveNpcAlertRecipients } from './npcCoordination';
+import { getNpcTacticalProfile } from './npcTactics';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -400,7 +401,15 @@ export function World3DCanvas({
               if (otherPose) blockedTiles.add(tileKey(Math.round(otherPose.x), Math.round(otherPose.y)));
             }
             const previousBehaviorState = behaviorAgent.state;
-            behaviorAgent = updateNpcBehavior(terrainMap, behaviorAgent, playerTile, delta, { blockedTiles });
+            const tacticalProfile = getNpcTacticalProfile(actor.activity);
+            behaviorAgent = updateNpcBehavior(terrainMap, behaviorAgent, playerTile, delta, {
+              blockedTiles,
+              alertRadius: tacticalProfile.alertRadius,
+              chaseRadius: tacticalProfile.chaseRadius,
+              disengageRadius: tacticalProfile.disengageRadius,
+              maxChaseTiles: tacticalProfile.maxChaseTiles,
+              stepDurationMs: tacticalProfile.stepDurationMs,
+            });
             npcBehaviorAgentsRef.current[index] = behaviorAgent;
             if (previousBehaviorState !== 'ALERT' && behaviorAgent.state === 'ALERT') {
               const sourceTile = behaviorAgent.position;
