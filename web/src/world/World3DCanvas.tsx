@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager } from './chunks';
 import { findTerrainPath } from './navigation';
+import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -131,6 +132,7 @@ export function World3DCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const positionRef = useRef({ i: worldTile.x, j: worldTile.y });
   const movementRef = useRef<MovementState | null>(null);
+  const npcAgentsRef = useRef<NpcAgent[]>([]);
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
   const onSignalSelectRef = useRef(onSignalSelect);
@@ -170,6 +172,8 @@ export function World3DCanvas({
     () => getZoneNpcs(zone, worldThreat, worldResources, explorationCount),
     [zoneId, worldThreat, worldResources, explorationCount],
   );
+  const initialNpcAgents = useMemo(() => createNpcAgents(terrainMap, sceneNpcs), [terrainMap, sceneNpcs]);
+  useEffect(() => { npcAgentsRef.current = initialNpcAgents; }, [initialNpcAgents]);
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
@@ -351,14 +355,21 @@ export function World3DCanvas({
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, sceneVertices.length / 6);
 
+        npcAgentsRef.current = advanceNpcAgents(npcAgentsRef.current, delta);
         const npcOutput: number[] = [];
         for (let index = 0; index < sceneNpcs.length; index++) {
           const actor = sceneNpcs[index];
-          const tile = getTerrainTile(terrainMap, actor.x, actor.y);
-          if (!tile?.walkable) continue;
+          const agent = npcAgentsRef.current[index];
+          if (!agent) continue;
+          const pose = getNpcAgentPose(agent);
+          const fromTile = getTerrainTile(terrainMap, agent.path[agent.fromIndex].i, agent.path[agent.fromIndex].j);
+          const toTile = getTerrainTile(terrainMap, agent.path[agent.toIndex].i, agent.path[agent.toIndex].j);
+          const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
+          if (!fromTile || !toTile || !tile?.walkable) continue;
+          const groundZ = terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
           const activityAmount = actor.activity === 'patrol' ? 0.72 : actor.activity === 'defend' ? 0.42 : 0.24;
           const phase = time * (actor.activity === 'patrol' ? 0.0048 : 0.0022) + npcAnimationPhase(actor.id);
-          const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount });
+          const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount, x: pose.x, y: pose.y, groundZ });
           for (const value of mesh) npcOutput.push(value);
         }
         gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
