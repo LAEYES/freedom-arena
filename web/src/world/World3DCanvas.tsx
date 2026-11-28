@@ -13,6 +13,8 @@ import { planNpcDirectionalCoverRoute } from './npcCover';
 import { electNpcSquadLeader, formationAnchor, partitionNpcSquads, prepareNpcSquadRegroup, resolveNpcSquadLeaderHandoff, shouldRefreshNpcFormation, shouldRegroupNpcSquad } from './npcSquad';
 import { advanceNpcFormationMotion, createNpcFormationMotion, getNpcFormationPose, planNpcFormation, type NpcFormationMotion } from './npcFormation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
+import { detectBridgeLinks, getBridgeTileKeys } from './bridges';
+import { generateSettlementDistrict, getSettlementInteraction } from './settlements';
 import {
   getZone,
   getZoneEnvironment,
@@ -26,6 +28,8 @@ import {
   buildTerrainMesh,
   buildTerrainCliffMesh,
   buildRoadMesh,
+  buildBridgeMesh,
+  buildSettlementStructureMesh,
   pickNearestTerrainTile,
   terrainWorldHeight,
   buildNpcMesh,
@@ -48,8 +52,8 @@ type World3DCanvasProps = {
   worldResources: number;
   explorationCount: number;
   worldEvent: WorldEvent;
-  onTileMove: (tileX: number, tileY: number) => boolean;
-  onSignalSelect: (signal: { type: 'poi' | 'npc' | 'event'; name: string; x: number; y: number }) => void;
+  onTileMove: (tileX: number, tileY: number, viaBridge?: boolean) => boolean;
+  onSignalSelect: (signal: { type: 'poi' | 'npc' | 'event' | 'settlement'; name: string; x: number; y: number }) => void;
   onSwitchTo2D: () => void;
 };
 
@@ -241,6 +245,12 @@ export function World3DCanvas({
     () => getZoneNpcs(zone, worldThreat, worldResources, explorationCount),
     [zoneId, worldThreat, worldResources, explorationCount],
   );
+  const bridgeLinks = useMemo(() => detectBridgeLinks(terrainMap), [terrainMap]);
+  const bridgeTileKeys = useMemo(() => getBridgeTileKeys(bridgeLinks), [bridgeLinks]);
+  const settlementDistricts = useMemo(() => zone.pointsOfInterest.map((name, index) => {
+    const anchor = getPoiPosition(zone, index);
+    return generateSettlementDistrict(terrainMap, zone.id + ':settlement:' + index, name + ' District', anchor, terrainMap.seed + index * 104729);
+  }).filter((district): district is NonNullable<typeof district> => district !== null), [terrainMap, zoneId]);
   const initialNpcAgents = useMemo(() => createNpcAgents(terrainMap, sceneNpcs), [terrainMap, sceneNpcs]);
   useEffect(() => {
     npcAgentsRef.current = initialNpcAgents;
@@ -253,6 +263,7 @@ export function World3DCanvas({
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
     append(buildTerrainCliffMesh(terrainMap.tiles));
+    for (const bridge of bridgeLinks) append(buildBridgeMesh(bridge.bankA, bridge.water, bridge.bankB));
     const eventPosition = getWorldEventPoint(worldEvent);
     const eventTile = getTerrainTile(terrainMap, eventPosition.x, eventPosition.y);
     if (eventTile?.walkable) {
@@ -263,7 +274,7 @@ export function World3DCanvas({
       }
     }
     return new Float32Array(output);
-  }, [terrainMap, worldEvent.id, worldEvent.intensity]);
+  }, [terrainMap, bridgeLinks, worldEvent.id, worldEvent.intensity]);
 
   const sceneChunkMeshes = useMemo(() => {
     const chunkTiles = new Map<string, typeof terrainMap.tiles>();
@@ -275,6 +286,7 @@ export function World3DCanvas({
     }
     const roadSegments = new Map<string, Array<Array<{ i: number; j: number }>>>();
     const landmarkByChunk = new Map<string, Array<{ tile: typeof terrainMap.tiles[number]; kind: 'watchtower' | 'shrine' | 'ruins' | 'gate' }>>();
+    const settlementByChunk = new Map<string, Array<{ tile: typeof terrainMap.tiles[number]; kind: 'hall' | 'market' | 'workshop' | 'residence' | 'watchpost' }>>();
     const roadOrigin = getTerrainTile(terrainMap, 32, 32);
     zone.pointsOfInterest.forEach((_, index) => {
       const position = getPoiPosition(zone, index);
@@ -289,7 +301,7 @@ export function World3DCanvas({
         terrainMap,
         { i: roadOrigin.i, j: roadOrigin.j, elevation: roadOrigin.elevation },
         { i: tile.i, j: tile.j, elevation: tile.elevation },
-        { allowDiagonal: false, maxExpandedNodes: 8192 },
+        { allowDiagonal: false, maxExpandedNodes: 8192, bridgeTiles: bridgeTileKeys },
       );
       if (route.length === 1) {
         const routeKey = Math.floor(route[0].i / 16) + ':' + Math.floor(route[0].j / 16);
@@ -306,22 +318,33 @@ export function World3DCanvas({
       }
     });
 
+    for (const district of settlementDistricts) {
+      for (const structure of district.structures) {
+        const key = Math.floor(structure.tile.i / 16) + ':' + Math.floor(structure.tile.j / 16);
+        const structures = settlementByChunk.get(key) ?? [];
+        structures.push({ tile: structure.tile, kind: structure.kind });
+        settlementByChunk.set(key, structures);
+      }
+    }
+
     const result = new Map<string, { high: Float32Array; medium: Float32Array; low: Float32Array }>();
     for (const [key, tiles] of chunkTiles) {
       const landmarks = landmarkByChunk.get(key) ?? [];
       const roads = roadSegments.get(key) ?? [];
+      const settlementStructures = settlementByChunk.get(key) ?? [];
       const buildLod = (lod: 'high' | 'medium' | 'low') => {
         const output: number[] = [];
         const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
         append(buildWorldDressingMesh(tiles, terrainMap.seed, { lod, includeVegetation: false }));
         for (const landmark of landmarks) append(buildLandmarkMesh(landmark.tile, landmark.kind));
+        for (const structure of settlementStructures) append(buildSettlementStructureMesh(structure.tile, structure.kind));
         for (const route of roads) append(buildRoadMesh(terrainMap.tiles, route));
         return new Float32Array(output);
       };
       result.set(key, { high: buildLod('high'), medium: buildLod('medium'), low: buildLod('low') });
     }
     return result;
-  }, [terrainMap, zoneId]);
+  }, [terrainMap, zoneId, bridgeTileKeys, settlementDistricts]);
   const vegetationChunkInstances = useMemo(() => {
     const chunkTiles = new Map<string, typeof terrainMap.tiles>();
     for (const tile of terrainMap.tiles) {
@@ -979,7 +1002,7 @@ export function World3DCanvas({
               movementRef.current = null;
               break;
             }
-            const accepted = onTileMoveRef.current(next.i, next.j);
+            const accepted = onTileMoveRef.current(next.i, next.j, bridgeTileKeys.has(next.i + ':' + next.j));
             if (!accepted) {
               movementRef.current = null;
               setHud(current => ({ ...current, status: 'Déplacement bloqué par les règles du monde existant' }));
@@ -1005,12 +1028,12 @@ export function World3DCanvas({
 
       const startMovement = (targetI: number, targetJ: number) => {
         const current = positionRef.current;
-        if (targetI < 0 || targetJ < 0 || targetI >= 60 || targetJ >= 40) return;
+        if (targetI < 0 || targetJ < 0 || targetI >= terrainMap.width || targetJ >= terrainMap.height) return;
         const path = findTerrainPath(
           terrainMap,
           { i: current.i, j: current.j },
           { i: targetI, j: targetJ },
-          { allowDiagonal: false, maxExpandedNodes: 8192 },
+          { allowDiagonal: false, maxExpandedNodes: 8192, bridgeTiles: bridgeTileKeys },
         );
         if (!path.length) {
           setHud(value => ({ ...value, status: 'Destination inaccessible' }));
@@ -1040,6 +1063,9 @@ export function World3DCanvas({
             return pose && Math.round(pose.x) === tile.i && Math.round(pose.y) === tile.j;
           });
           const npc = npcIndex >= 0 ? sceneNpcs[npcIndex] : undefined;
+          const settlementStructure = settlementDistricts
+            .map(district => getSettlementInteraction(district, { i: tile.i, j: tile.j }))
+            .find(structure => structure !== null);
           const poiIndex = zone.pointsOfInterest.findIndex((_, index) => {
             const point = getPoiPosition(zone, index);
             return point.x === tile.i && point.y === tile.j;
@@ -1047,11 +1073,13 @@ export function World3DCanvas({
           const eventPoint = getWorldEventPoint(worldEvent);
           if (npc) {
             onSignalSelectRef.current({ type: 'npc', name: npc.name, x: npc.x, y: npc.y });
+          } else if (settlementStructure) {
+            onSignalSelectRef.current({ type: 'settlement', name: settlementStructure.name + ' · ' + settlementStructure.interaction, x: tile.i, y: tile.j });
           } else if (poiIndex >= 0) {
             onSignalSelectRef.current({ type: 'poi', name: zone.pointsOfInterest[poiIndex], x: tile.i, y: tile.j });
           } else if (eventPoint.x === tile.i && eventPoint.y === tile.j) {
             onSignalSelectRef.current({ type: 'event', name: worldEvent.title, x: tile.i, y: tile.j });
-          } else if (tile.walkable) {
+          } else if (tile.walkable || bridgeTileKeys.has(tile.i + ':' + tile.j)) {
             startMovement(tile.i, tile.j);
           }
         }
@@ -1120,7 +1148,7 @@ export function World3DCanvas({
         if (program) gl.deleteProgram(program);
       }
     };
-  }, [terrainMap, chunkManager, sceneVertices, sceneChunkMeshes, vegetationChunkInstances, sceneNpcs, weatherVertices]);
+  }, [terrainMap, chunkManager, sceneVertices, sceneChunkMeshes, vegetationChunkInstances, sceneNpcs, weatherVertices, bridgeTileKeys]);
 
   const rotate = (delta: number) => {
     setAzimuth(current => {
