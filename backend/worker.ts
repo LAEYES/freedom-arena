@@ -139,6 +139,11 @@ async function adjudicateExpiredPvpMatches(db: D1Database): Promise<number> {
       settled++;
     }
   }
+  const pending = await db.prepare("SELECT m.match_id FROM pvp_matches m WHERE m.status='completed' AND NOT EXISTS(SELECT 1 FROM pvp_rating_log r WHERE r.match_id=m.match_id) ORDER BY m.updated_at ASC LIMIT 100").all<{match_id:string}>();
+  for (const match of pending.results) {
+    await applyPvpRatingSettlement(db,match.match_id);
+    settled++;
+  }
   return settled;
 }
 
