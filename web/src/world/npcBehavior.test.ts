@@ -15,6 +15,19 @@ describe('local NPC tactical behavior', () => {
     expect(agent.path.length).toBeGreaterThan(1);
   });
 
+  it('does not acquire a player behind the NPC facing direction', () => {
+    const agent = createNpcBehaviorAgent('npc-behind', { i: 10, j: 10 });
+    const result = updateNpcBehavior(map, agent, { i: 6, j: 10 }, 16);
+    expect(result.state).toBe('PATROL');
+  });
+
+  it('updates facing direction when the NPC advances along its route', () => {
+    let agent = createNpcBehaviorAgent('npc-facing', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100, { stepDurationMs: 100 });
+    expect(agent.facing).toEqual({ i: 1, j: 0 });
+  });
+
   it('interpolates a chase step without teleporting', () => {
     let agent = createNpcBehaviorAgent('npc-b', { i: 10, j: 10 });
     agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
