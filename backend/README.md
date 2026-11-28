@@ -239,3 +239,25 @@ Authenticated endpoints:
 The client cannot nominate an opponent, set rating/level, or create a match record. D1 stores the match and unique participant rows; the participant uniqueness constraint prevents one player from being assigned to concurrent matches. The queue is rate-limited by the existing authenticated route-family limiter.
 
 This increment implements matchmaking and match registration only. It does not yet implement PvP turn execution, combat settlement, Elo updates after a completed duel, disconnect/timeout adjudication, rewards or rematch cleanup. Those require the next authoritative duel lifecycle increment. Apply migration 009 before deploying this Worker. No remote migration, deployment or PR merge is performed by this change.
+
+
+## FA-WORLD-044 authoritative PvP duel lifecycle
+
+Apply migration 010 after migration 009:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/010_fa_world_044_pvp_duel.sql
+```
+
+Fresh databases receive the duel columns and tables from `schema.sql`.
+
+- `GET /pvp/matches/:matchId/state`: participant-only state and ordered turn history.
+- `POST /pvp/matches/:matchId/action`: participant submits only a unique command ID and one allowlisted action (`strike`, `guard`, `skill`). The Worker derives combat stats from stored player cards/equipment, applies bounded server-side damage variance, validates whose turn it is and persists the state and turn ledger.
+- `POST /pvp/matches/:matchId/forfeit`: participant forfeits; the other participant wins.
+- Each turn has a 45-second deadline. The next valid action after an expired deadline triggers timeout adjudication against the player whose turn expired.
+- A duel is capped at 40 actions. A knockout ends it; a capped duel is settled as a draw.
+- Elo settlement is recorded in a unique per-match rating ledger. Active-player locks are released after settlement, allowing rematches without losing historical match records.
+
+The command ID and unique (match, turn) constraint protect retries and concurrent submissions. D1 conditional writes ensure only the expected actor can consume a turn. PvP uses isolated state and never grants PvE loot, XP or world resources.
+
+Operational limitations still requiring a later increment: automated background timeout execution (timeout is adjudicated on the next request), reconnect/resume UX, spectator privacy policy, anti-collusion/smurf detection, ranked-season resets, moderation/reporting, and a dedicated load/concurrency test against D1. Do not deploy until migrations 009 and 010 have been applied in order and CI is green.
