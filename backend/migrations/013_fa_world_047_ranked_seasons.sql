@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS pvp_seasons (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pvp_one_active_season ON pvp_seasons(status) WHERE status='active';
 
+ALTER TABLE pvp_matches ADD COLUMN season_id TEXT REFERENCES pvp_seasons(season_id);
+
 CREATE TABLE IF NOT EXISTS pvp_season_ratings (
   season_id TEXT NOT NULL REFERENCES pvp_seasons(season_id),
   player_id TEXT NOT NULL,
@@ -27,7 +29,7 @@ CREATE TABLE IF NOT EXISTS pvp_season_events (
   season_id TEXT NOT NULL REFERENCES pvp_seasons(season_id),
   match_id TEXT NOT NULL REFERENCES pvp_matches(match_id),
   player_id TEXT NOT NULL,
-  rating_after INTEGER NOT NULL CHECK(rating_after BETWEEN 100 AND 4000),
+  rating_delta INTEGER NOT NULL CHECK(rating_delta BETWEEN -64 AND 64),
   result TEXT NOT NULL CHECK(result IN ('win','loss','draw')),
   applied_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
