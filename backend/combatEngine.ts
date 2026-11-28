@@ -1,3 +1,4 @@
+import { chooseEnemyArchetype, decideEnemyTactics, type EnemyArchetype } from "./enemyAI.ts";
 export type CombatEffect = "burn" | "poison" | "weaken" | "expose" | "shield" | "regeneration";
 export type PersistentStatus = { type: "burn" | "poison" | "weaken"; remaining: number; potency: number };
 export type StoredCard = {
@@ -16,7 +17,7 @@ export type CombatEncounter = {
   victory: boolean; outcome: "victory" | "defeat" | "draw"; enemyLevel: number;
   player: Combatant & { remainingHp: number }; enemy: Combatant & { remainingHp: number };
   turns: CombatTurn[]; xpAwarded: number; resourcesAwarded: number;
-  threatDelta: number; equippedCardId: string | null; remainingStatuses: PersistentStatus[];
+  threatDelta: number; equippedCardId: string | null; remainingStatuses: PersistentStatus[]; enemyArchetype: EnemyArchetype;
 };
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, Number.isFinite(v) ? Math.floor(v) : min));
@@ -53,6 +54,7 @@ export function resolveCombatEncounter(
   const card = loadout.weapon ? cards.find(c => c && c.id === loadout.weapon) ?? null : null;
   const playerBase = equipment ? buildEquippedCombatant(level, cards, loadout) : buildPlayerCombatant(level, card);
   const enemyLevel = clamp(level + (threat >= 30 ? 2 : threat >= 12 ? 1 : 0) + (rollAt(rolls, 0) > 0.78 ? 1 : 0), 1, 100);
+  const enemyArchetype = chooseEnemyArchetype(rollAt(rolls, 39));
   const enemy: Combatant = {
     maxHp: clamp(62 + enemyLevel * 9 + threat, 60, 1800),
     attack: clamp(9 + enemyLevel * 2 + Math.floor(threat / 8), 8, 650),
@@ -120,19 +122,29 @@ export function resolveCombatEncounter(
           if (skill && abilityEffect === "weaken") enemyWeakenedRounds = 2;
           turns.push({ turn: round, actor, action: skill ? "skill" : "strike", damage, targetHp: enemyHp, effect: skill ? abilityEffect : undefined });
         }
-      } else if (round % 5 === 0 && rollAt(rolls, round * 3) > 0.2) {
-        enemyGuard = clamp(Math.floor(enemy.defense * 0.8), 0, 400);
-        turns.push({ turn: round, actor, action: "guard", damage: 0, targetHp: enemyHp, effect: "guard" });
       } else {
-        const heavy = round % 4 === 0 && rollAt(rolls, round * 3) > 0.35;
-        const raw = enemy.attack * (heavy ? 1.45 : 1) * (enemyWeakenedRounds > 0 ? 0.7 : 1);
-        const damage = clamp(Math.max(1, Math.floor(raw - playerBase.defense * 0.6 - playerShield)), 1, 750);
-        playerHp = Math.max(0, playerHp - damage);
-        playerShield = 0;
-        turns.push({ turn: round, actor, action: heavy ? "heavy_strike" : "strike", damage, targetHp: playerHp });
-        if (heavy && playerHp > 0 && rollAt(rolls, round * 3 + 1) > 0.6 && !resistances.has("burn")) {
-          statuses.push({ type: "burn", remaining: 2, potency: 4 });
-          turns.push({ turn: round, actor: "enemy", action: "skill", damage: 0, targetHp: playerHp, effect: "burn" });
+        const decision = decideEnemyTactics({
+          archetype: enemyArchetype, enemy: { x: 10, y: 10 }, player: { x: 11, y: 10 },
+          enemyHp, enemyMaxHp: enemy.maxHp, turn: round, roll: rollAt(rolls, round * 3),
+        });
+        if (decision.action === "guard" || decision.action === "retreat") {
+          enemyGuard = clamp(Math.floor(enemy.defense * (enemyArchetype === "sentinel" ? 1.1 : 0.8)), 0, 450);
+          turns.push({ turn: round, actor, action: "guard", damage: 0, targetHp: enemyHp, effect: "guard" });
+        } else if (decision.action === "skill") {
+          const applies = !resistances.has("weaken");
+          if (applies) statuses.push({ type: "weaken", remaining: 1, potency: 5 });
+          turns.push({ turn: round, actor, action: "skill", damage: 0, targetHp: playerHp, effect: applies ? "weaken" : undefined });
+        } else {
+          const heavy = decision.action === "heavy_strike" || (enemyArchetype === "bruiser" && rollAt(rolls, round * 3 + 1) > 0.35);
+          const raw = enemy.attack * (heavy ? (enemyArchetype === "bruiser" ? 1.6 : 1.45) : 1) * (enemyWeakenedRounds > 0 ? 0.7 : 1);
+          const damage = clamp(Math.max(1, Math.floor(raw - playerBase.defense * 0.6 - playerShield)), 1, 750);
+          playerHp = Math.max(0, playerHp - damage);
+          playerShield = 0;
+          turns.push({ turn: round, actor, action: heavy ? "heavy_strike" : "strike", damage, targetHp: playerHp });
+          if (heavy && playerHp > 0 && rollAt(rolls, round * 3 + 1) > 0.6 && !resistances.has("burn")) {
+            statuses.push({ type: "burn", remaining: 2, potency: 4 });
+            turns.push({ turn: round, actor: "enemy", action: "skill", damage: 0, targetHp: playerHp, effect: "burn" });
+          }
         }
       }
     }
@@ -149,7 +161,7 @@ export function resolveCombatEncounter(
     resourcesAwarded: victory ? 1 + Math.floor(enemyLevel / 10) : 0,
     threatDelta: victory ? -2 : outcome === "draw" ? 0 : 1,
     equippedCardId: card && typeof card.id === "string" ? card.id : null,
-    remainingStatuses: normalizeStatuses(statuses),
+    remainingStatuses: normalizeStatuses(statuses), enemyArchetype,
   };
 }
 

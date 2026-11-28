@@ -197,3 +197,24 @@ npm test
 ```
 
 Apply migration 008 before deploying this Worker. No remote migration, deployment or PR merge is performed by this change.
+
+
+## FA-WORLD-042 tactical PvE enemy AI
+
+Enemy archetypes are selected by the Worker from server-generated randomness and persisted in the combat outcome:
+
+- `bruiser`: high-pressure heavy melee attacks.
+- `skirmisher`: disengages defensively when its health is low.
+- `sentinel`: rotates guard behavior and increases defense when wounded.
+- `arcanist`: applies periodic weakening skills.
+
+The pure decision module `enemyAI.ts` contains deterministic archetype selection, bounded tactical decisions and a 64×64 cardinal-grid breadth-first path planner. Pathfinding rejects out-of-bounds coordinates, caps exploration to 4096 cells, avoids blocked cells and returns the current position when no path exists. Combat decisions are driven only by server-generated rolls and server-owned player/enemy state; the request cannot select an archetype or AI action.
+
+Run all backend tests from `backend/`:
+
+```bash
+npm run check
+npm test
+```
+
+This increment wires archetype tactics into authoritative PvE combat and supplies the tested grid planner for world-agent movement. Persistent roaming, patrol schedules, perception/line-of-sight and multi-enemy coordination remain future extensions. No D1 migration is required; the archetype is stored in the existing combat outcome JSON. No remote deployment or merge is performed by this PR.
