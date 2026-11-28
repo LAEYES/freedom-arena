@@ -43,6 +43,27 @@ describe('WebGL world mesh and picking', () => {
     expect(mesh.every(Number.isFinite)).toBe(true);
   });
 
+  it('animates the avatar gait deterministically without changing mesh topology', () => {
+    const idle = buildAvatarMesh(grass, { phase: 0, walkAmount: 0 });
+    const walking = buildAvatarMesh(grass, {
+      x: 4.75,
+      y: 7.25,
+      groundZ: terrainWorldHeight(grass) + 0.06,
+      phase: Math.PI / 2,
+      walkAmount: 1,
+    });
+    expect(walking.length).toBe(idle.length);
+    expect(walking.every(Number.isFinite)).toBe(true);
+    expect(Array.from(walking)).not.toEqual(Array.from(idle));
+    expect(Array.from(buildAvatarMesh(grass, {
+      phase: Math.PI / 2,
+      walkAmount: 1,
+    }))).toEqual(Array.from(buildAvatarMesh(grass, {
+      phase: Math.PI / 2,
+      walkAmount: 1,
+    })));
+  });
+
   it('maps terrain kinds to normalized RGB colors', () => {
     expect(Object.keys(TERRAIN_PALETTE)).toEqual(['grass', 'forest', 'water', 'rock', 'sand', 'snow']);
     for (const color of Object.values(TERRAIN_PALETTE)) {
