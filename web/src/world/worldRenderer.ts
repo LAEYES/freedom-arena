@@ -118,7 +118,7 @@ export type AvatarAnimation = {
   walkAmount?: number;
 };
 
-/** Low-poly humanoid with deterministic procedural arm/leg swing and body bob. */
+/** Stylized low-poly adventurer: layered faction armor, readable equipment and deterministic gait. */
 export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = {}): Float32Array {
   const output: number[] = [];
   const x = animation.x ?? tile.i + 0.5;
@@ -129,12 +129,31 @@ export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = 
   const swing = Math.sin(phase) * 0.13 * walk;
   const oppositeSwing = -swing;
   const bob = Math.abs(Math.sin(phase * 2)) * 0.035 * walk;
-  pushBox(output, { x, y, z: ground + 0.58 + bob }, { width: 0.34, depth: 0.28, height: 0.48 }, [0.24, 0.62, 0.96]);
-  pushBox(output, { x, y, z: ground + 0.96 + bob }, { width: 0.27, depth: 0.27, height: 0.27 }, [0.91, 0.78, 0.62]);
-  pushBox(output, { x: x - 0.23, y: y + oppositeSwing, z: ground + 0.59 + bob }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
-  pushBox(output, { x: x + 0.23, y: y + swing, z: ground + 0.59 + bob }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
-  pushBox(output, { x: x - 0.10, y: y + swing, z: ground + 0.20 + bob * 0.35 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
-  pushBox(output, { x: x + 0.10, y: y + oppositeSwing, z: ground + 0.20 + bob * 0.35 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
+  const armor: RGB = [0.19, 0.43, 0.70];
+  const armorLight: RGB = [0.36, 0.64, 0.91];
+  const armorDark: RGB = [0.10, 0.23, 0.39];
+  const metal: RGB = [0.77, 0.70, 0.48];
+
+  // Core silhouette and helmet.
+  pushBox(output, { x, y, z: ground + 0.59 + bob }, { width: 0.35, depth: 0.29, height: 0.47 }, armor);
+  pushBox(output, { x, y, z: ground + 0.98 + bob }, { width: 0.27, depth: 0.27, height: 0.27 }, [0.83, 0.72, 0.57]);
+  pushBox(output, { x, y: y - 0.025, z: ground + 1.115 + bob }, { width: 0.30, depth: 0.29, height: 0.075 }, armorDark);
+  pushBox(output, { x, y: y - 0.17, z: ground + 1.015 + bob }, { width: 0.17, depth: 0.035, height: 0.045 }, metal);
+
+  // Shoulder plates, articulated arms and faction chest plate.
+  pushBox(output, { x: x - 0.245, y, z: ground + 0.76 + bob }, { width: 0.19, depth: 0.30, height: 0.20 }, armorLight);
+  pushBox(output, { x: x + 0.245, y, z: ground + 0.76 + bob }, { width: 0.19, depth: 0.30, height: 0.20 }, armorLight);
+  pushBox(output, { x: x - 0.25, y: y + oppositeSwing, z: ground + 0.55 + bob }, { width: 0.115, depth: 0.14, height: 0.34 }, armorDark);
+  pushBox(output, { x: x + 0.25, y: y + swing, z: ground + 0.55 + bob }, { width: 0.115, depth: 0.14, height: 0.34 }, armorDark);
+  pushBox(output, { x, y: y - 0.155, z: ground + 0.62 + bob }, { width: 0.19, depth: 0.045, height: 0.25 }, armorLight);
+  pushBox(output, { x, y: y - 0.185, z: ground + 0.62 + bob }, { width: 0.055, depth: 0.025, height: 0.16 }, metal);
+
+  // Waist, greaves and boots retain the alternating gait phase.
+  pushBox(output, { x, y, z: ground + 0.34 + bob * 0.35 }, { width: 0.32, depth: 0.27, height: 0.10 }, metal);
+  pushBox(output, { x: x - 0.10, y: y + swing, z: ground + 0.17 + bob * 0.35 }, { width: 0.14, depth: 0.18, height: 0.30 }, armorDark);
+  pushBox(output, { x: x + 0.10, y: y + oppositeSwing, z: ground + 0.17 + bob * 0.35 }, { width: 0.14, depth: 0.18, height: 0.30 }, armorDark);
+  pushBox(output, { x: x - 0.10, y: y + swing - 0.025, z: ground + 0.055 }, { width: 0.16, depth: 0.25, height: 0.10 }, [0.12, 0.15, 0.20]);
+  pushBox(output, { x: x + 0.10, y: y + oppositeSwing - 0.025, z: ground + 0.055 }, { width: 0.16, depth: 0.25, height: 0.10 }, [0.12, 0.15, 0.20]);
   return new Float32Array(output);
 }
 
