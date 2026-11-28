@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ChunkManager, buildWorldChunk, getChunkBounds, getChunkCoordinate } from './chunks';
+import { ChunkManager, buildWorldChunk, getChunkBounds, getChunkCoordinate, isChunkVisibleInCamera } from './chunks';
+import { createIsometricCamera } from './isometricCamera';
 import { generateTerrainMap } from './terrain';
 
 describe('world chunk manager', () => {
@@ -66,6 +67,28 @@ describe('world chunk manager', () => {
     expect(manager.getLoadedChunk('2:2')).toBeNull();
     manager.clear();
     expect(manager.getCacheStats()).toMatchObject({ loaded: 0, visible: 0 });
+  });
+
+  it('culls chunks behind a perspective third-person camera', () => {
+    const map = generateTerrainMap();
+    const nearChunk = buildWorldChunk(map, 2, 2)!;
+    const rearChunk = buildWorldChunk(map, 3, 3)!;
+    const camera = createIsometricCamera({
+      target: { x: 32, y: 32, z: 1.2 },
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      azimuthRadians: Math.PI / 4,
+      elevationRadians: 0.34,
+      distance: 10,
+      orthographicHeight: 48,
+      near: 0.05,
+      far: 240,
+      projectionMode: 'perspective',
+      fovRadians: Math.PI / 3,
+    });
+    expect(isChunkVisibleInCamera(nearChunk, camera)).toBe(true);
+    expect(isChunkVisibleInCamera(rearChunk, camera)).toBe(false);
+    expect(() => isChunkVisibleInCamera(nearChunk, camera, -1)).toThrow(RangeError);
   });
 
   it('rejects invalid chunk sizes, centres and radii', () => {
