@@ -55,3 +55,28 @@ export function getNpcFormationSlot(
     j: Math.round(leader.j - forwardJ * rank * safeSpacing + sideJ * side * safeSpacing),
   };
 }
+
+export type NpcRoleAssignmentInput = { id: string; position: TileCoordinate };
+export type NpcRoleAssignment = { id: string; role: NpcTacticalRole };
+
+/**
+ * Assigns tactical responsibilities relative to the current threat:
+ * nearest actor screens as GUARD, farthest actor scouts, remaining actors support.
+ * Stable ID tie-breaks make the result independent of input/render order.
+ */
+export function assignNpcDynamicRoles(
+  members: readonly NpcRoleAssignmentInput[],
+  threat: TileCoordinate,
+): NpcRoleAssignment[] {
+  const ranked = [...members].sort((a, b) => {
+    const da = Math.abs(a.position.i - threat.i) + Math.abs(a.position.j - threat.j);
+    const db = Math.abs(b.position.i - threat.i) + Math.abs(b.position.j - threat.j);
+    return da - db || a.id.localeCompare(b.id);
+  });
+  return ranked.map((member, index) => ({
+    id: member.id,
+    role: ranked.length === 1 || index === 0
+      ? 'GUARD'
+      : index === ranked.length - 1 ? 'SCOUT' : 'SUPPORT',
+  }));
+}
