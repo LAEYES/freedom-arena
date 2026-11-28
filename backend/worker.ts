@@ -160,6 +160,59 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
+    const pvpRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/pvp\\/(queue|status|cancel)$/);
+    if (pvpRoute) {
+      const zoneId = pvpRoute[1], action = pvpRoute[2], playerId = identity.subject;
+      if (request.method === "POST" && action === "queue") {
+        try {
+          const player = await env.DB.prepare("SELECT level FROM players WHERE id=?").bind(playerId).first<{level:number}>();
+          if (!player) return json({ error: "player_not_initialized" }, 409);
+          const presence = await env.DB.prepare("SELECT 1 AS ok FROM world_player_presence WHERE player_id=? AND zone_id=? AND updated_at >= datetime('now','-90 seconds')").bind(playerId,zoneId).first();
+          if (!presence) return json({ error: "player_not_present_in_zone" }, 403);
+          const active = await env.DB.prepare("SELECT m.match_id,m.status FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active')").bind(playerId).first<{match_id:string;status:string}>();
+          if (active) return json({ status: active.status, matchId: active.match_id, alreadyMatched: true }, 200);
+          const existing = await env.DB.prepare("SELECT rating,queued_at,status,match_id FROM pvp_queue WHERE player_id=?").bind(playerId).first<{rating:number;queued_at:string;status:string;match_id:string|null}>();
+          if (existing?.status === "matched" && existing.match_id) return json({status:"matched",matchId:existing.match_id},200);
+          await env.DB.prepare("INSERT INTO pvp_queue(player_id,zone_id,rating,level,status,match_id,queued_at,updated_at) VALUES(?,?,1000,?,'queued',NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) ON CONFLICT(player_id) DO UPDATE SET zone_id=excluded.zone_id,level=excluded.level,status='queued',match_id=NULL,queued_at=CASE WHEN pvp_queue.status='queued' THEN pvp_queue.queued_at ELSE CURRENT_TIMESTAMP END,updated_at=CURRENT_TIMESTAMP WHERE pvp_queue.status IN ('queued','cancelled')").bind(playerId,zoneId,Math.max(1,Math.min(100,Math.floor(player.level)))).run();
+          const me = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued'").bind(playerId).first<{rating:number;queued_at:string}>();
+          if (!me) return json({error:"queue_state_conflict"},409);
+          const waited = Math.max(0,Math.floor((Date.now()-Date.parse(me.queued_at+"Z"))/1000));
+          const ratingWindow = Math.min(800,100+Math.floor(waited/10)*50);
+          const opponent = await env.DB.prepare("SELECT q.player_id,q.rating,q.level FROM pvp_queue q JOIN world_player_presence p ON p.player_id=q.player_id AND p.zone_id=q.zone_id WHERE q.status='queued' AND q.zone_id=? AND q.player_id<>? AND ABS(q.rating-?)<=? AND ABS(q.level-?)<=10 AND p.updated_at >= datetime('now','-90 seconds') ORDER BY q.queued_at ASC LIMIT 1").bind(zoneId,playerId,me.rating,ratingWindow,player.level).first<{player_id:string;rating:number;level:number}>();
+          if (!opponent) return json({status:"queued",rating:me.rating,ratingWindow,waitSeconds:waited});
+          const matchId = crypto.randomUUID();
+          try {
+            await env.DB.batch([
+              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status) SELECT ?,?,?,?,?,?,?,?,'ready' WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,me.rating,opponent.rating,player.level,opponent.level,playerId,opponent.player_id),
+              env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,playerId,matchId),
+              env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,opponent.player_id,matchId),
+              env.DB.prepare("UPDATE pvp_queue SET status='matched',match_id=?,updated_at=CURRENT_TIMESTAMP WHERE player_id IN (?,?) AND status='queued'").bind(matchId,playerId,opponent.player_id),
+            ]);
+            const matched = await env.DB.prepare("SELECT match_id FROM pvp_match_participants WHERE player_id=? AND match_id=?").bind(playerId,matchId).first();
+            if (matched) return json({status:"matched",matchId,opponent:{level:opponent.level,rating:opponent.rating}});
+          } catch { /* Another queue request may have claimed one participant first. */ }
+          const current = await env.DB.prepare("SELECT m.match_id,m.status FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active')").bind(playerId).first<{match_id:string;status:string}>();
+          if (current) return json({status:current.status,matchId:current.match_id});
+          return json({status:"queued",rating:me.rating,ratingWindow});
+        } catch { return json({error:"pvp_queue_failed"},500); }
+      }
+      if (request.method === "GET" && action === "status") {
+        try {
+          const match = await env.DB.prepare("SELECT m.match_id,m.zone_id,m.player_a,m.player_b,m.rating_a,m.rating_b,m.level_a,m.level_b,m.status,m.winner_id,m.created_at FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active','completed') ORDER BY m.created_at DESC LIMIT 1").bind(playerId).first<Record<string,unknown>>();
+          if (match) return json({match});
+          const queued = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued' AND zone_id=?").bind(playerId,zoneId).first<{rating:number;queued_at:string}>();
+          return json(queued ? {status:"queued",rating:queued.rating,queuedAt:queued.queued_at} : {status:"idle"});
+        } catch { return json({error:"pvp_status_failed"},500); }
+      }
+      if (request.method === "POST" && action === "cancel") {
+        try {
+          const result = await env.DB.prepare("UPDATE pvp_queue SET status='cancelled',updated_at=CURRENT_TIMESTAMP WHERE player_id=? AND zone_id=? AND status='queued'").bind(playerId,zoneId).run();
+          return json({cancelled:Number(result.meta.changes??0)===1});
+        } catch { return json({error:"pvp_cancel_failed"},500); }
+      }
+      return json({error:"method_not_allowed"},405);
+    }
+
     const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip|inventory)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
