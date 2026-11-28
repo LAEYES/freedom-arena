@@ -57,6 +57,53 @@ describe('isometric 3D camera', () => {
     }
   });
 
+  it('centres the target in perspective third-person projection', () => {
+    const camera = createIsometricCamera({
+      target: { x: 32, y: 32, z: 1.4 },
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      azimuthRadians: Math.PI / 4,
+      elevationRadians: 0.32,
+      distance: 9,
+      orthographicHeight: 48,
+      near: 0.05,
+      far: 300,
+      projectionMode: 'perspective',
+      fovRadians: Math.PI / 3,
+    });
+    const screen = projectWorldToScreen(camera.config.target, camera);
+    expect(screen.x).toBeCloseTo(640, 8);
+    expect(screen.y).toBeCloseTo(360, 8);
+  });
+
+  it('round-trips perspective screen rays onto a horizontal elevation plane', () => {
+    const camera = createIsometricCamera({
+      target: { x: 32, y: 32, z: 1 },
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      azimuthRadians: Math.PI / 4,
+      elevationRadians: 0.42,
+      distance: 12,
+      orthographicHeight: 48,
+      near: 0.05,
+      far: 300,
+      projectionMode: 'perspective',
+      fovRadians: Math.PI / 3,
+    });
+    const samples = [
+      { x: 32, y: 32, z: 0 },
+      { x: 35, y: 30, z: 0.5 },
+      { x: 28, y: 34, z: 1.5 },
+    ];
+    for (const world of samples) {
+      const screen = projectWorldToScreen(world, camera);
+      const restored = unprojectScreenToElevation(screen, world.z, camera);
+      expect(restored.x).toBeCloseTo(world.x, 7);
+      expect(restored.y).toBeCloseTo(world.y, 7);
+      expect(restored.z).toBeCloseTo(world.z, 7);
+    }
+  });
+
   it('rejects invalid viewport and clipping configuration', () => {
     expect(() => createIsometricCamera({
       ...makeCamera().config,
