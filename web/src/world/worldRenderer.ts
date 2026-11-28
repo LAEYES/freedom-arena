@@ -118,6 +118,32 @@ export type AvatarAnimation = {
   walkAmount?: number;
 };
 
+/** Stylized ground-projected ellipse; visual cue only, not a physical shadow map. */
+export function buildGroundShadowMesh(
+  x: number,
+  y: number,
+  z: number,
+  radiusX = 0.32,
+  radiusY = 0.22,
+): Float32Array {
+  if (![x, y, z, radiusX, radiusY].every(Number.isFinite) || radiusX <= 0 || radiusY <= 0) {
+    throw new RangeError('Shadow coordinates and radii must be finite; radii must be positive.');
+  }
+  const output: number[] = [];
+  const segments = 10;
+  const color: RGB = [0.055, 0.065, 0.085];
+  for (let index = 0; index < segments; index++) {
+    const a = (index / segments) * Math.PI * 2;
+    const b = ((index + 1) / segments) * Math.PI * 2;
+    pushTriangle(output,
+      { x, y, z },
+      { x: x + Math.cos(a) * radiusX, y: y + Math.sin(a) * radiusY, z },
+      { x: x + Math.cos(b) * radiusX, y: y + Math.sin(b) * radiusY, z },
+      color);
+  }
+  return new Float32Array(output);
+}
+
 /** Low-poly humanoid with deterministic procedural arm/leg swing and body bob. */
 export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = {}): Float32Array {
   const output: number[] = [];
