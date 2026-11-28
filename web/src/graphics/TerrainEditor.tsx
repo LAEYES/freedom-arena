@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ChangeEvent } from 'react';
 import { createAsset, paintProceduralTile, type Biome, type MaterialKind } from './assetFactory';
 import { createTerrainDocument, paintTerrainCell, parseTerrainDocument, serializeTerrainDocument, type TerrainDocument } from './terrainDocument';
 
@@ -29,7 +29,7 @@ export function TerrainEditor() {
       const x = (index % document.width) * CELL_PIXELS;
       const y = Math.floor(index / document.width) * CELL_PIXELS;
       const asset = createAsset(cell.kind, cell.biome, cell.seed, 64);
-      const tile = document.createElement('canvas');
+      const tile = window.document.createElement('canvas');
       tile.width = 64; tile.height = 64;
       const tileCtx = tile.getContext('2d');
       if (tileCtx) paintProceduralTile(tileCtx, asset, 0, 0);
@@ -43,7 +43,7 @@ export function TerrainEditor() {
     }
   }, [document, showGrid]);
 
-  const paintAt = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const paintAt = (event: PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = Math.floor((event.clientX - rect.left) / rect.width * document.width);
     const y = Math.floor((event.clientY - rect.top) / rect.height * document.height);
@@ -59,7 +59,7 @@ export function TerrainEditor() {
     URL.revokeObjectURL(url);
     setMessage('Layout terrain exporté au format JSON v1.');
   };
-  const importJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
