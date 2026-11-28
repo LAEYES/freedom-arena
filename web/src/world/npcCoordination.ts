@@ -110,6 +110,9 @@ export function planMultiSquadInterceptions(
   const safeRing = Number.isFinite(maxRing) ? Math.max(1, Math.min(8, Math.floor(maxRing))) : 4;
   const reserved = new Set(occupied);
   reserved.add(tileKey(target.i, target.j));
+  for (const squad of squads) for (const member of squad.members) {
+    reserved.add(tileKey(member.position.i, member.position.j));
+  }
   const plans: NpcCoordinatedInterceptionPlan[] = [];
   const orderedSquads = [...squads].sort((a, b) => {
     const centroid = (squad: NpcInterceptionSquad) => squad.members.length
