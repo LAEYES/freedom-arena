@@ -26,8 +26,9 @@ function stableHash(value: string): number {
 /** Creates deterministic closed A* patrol routes without changing authoritative game state. */
 export function createNpcAgents(map: TerrainMap, actors: readonly NpcRouteSeed[]): NpcAgent[] {
   const occupied = new Set(actors.map(actor => tileKey(actor.x, actor.y)));
+  const reservedRoutes = new Set<string>();
   return actors.map(actor => {
-    const blockedTiles = new Set(occupied);
+    const blockedTiles = new Set([...occupied, ...reservedRoutes]);
     blockedTiles.delete(tileKey(actor.x, actor.y));
     const offsets = [
       { x: 7, y: 0 }, { x: 0, y: 6 }, { x: -7, y: 0 }, { x: 0, y: -6 },
@@ -51,6 +52,10 @@ export function createNpcAgents(map: TerrainMap, actors: readonly NpcRouteSeed[]
       }
     }
     if (!route.length) route = [{ i: actor.x, j: actor.y }];
+    for (const point of route) {
+      const key = tileKey(point.i, point.j);
+      if (key !== tileKey(actor.x, actor.y)) reservedRoutes.add(key);
+    }
     const speedFactor = 0.9 + (stableHash(actor.id + ':speed') % 31) / 100;
     const activityFactor = actor.activity === 'patrol' ? 1 : actor.activity === 'defend' ? 0.72 : 0.55;
     const moving = route.length > 1;
