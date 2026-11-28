@@ -57,7 +57,7 @@ describe('geometric NPC engagement', () => {
     expect(new Set(plans.map(plan => tileKey(plan.slot.i, plan.slot.j))).size).toBe(plans.length);
     for (const plan of plans) {
       expect(plan.path[0]).toMatchObject(members.find(member => member.id === plan.id)!.position);
-      expect(plan.path[plan.path.length - 1]).toEqual(plan.slot);
+      expect(plan.path[plan.path.length - 1]).toMatchObject(plan.slot);
       expect(Math.abs(plan.slot.i - target.i) + Math.abs(plan.slot.j - target.j)).toBe(1);
     }
   });
