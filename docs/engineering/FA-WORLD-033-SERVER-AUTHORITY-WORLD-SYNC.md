@@ -1,6 +1,6 @@
 # FA-WORLD-033 — Server-side world synchronization foundation
 
-Status: implementation committed; CI validation pending.
+Status: implemented and CI validated.
 Runtime: Cloudflare Workers + D1.
 Activation: opt-in; `VITE_WORLD_SYNC_ENABLED` defaults to disabled.
 
@@ -45,7 +45,13 @@ Zone state uses a compare-and-swap revision. Competing writers cannot silently o
 - Deploy the Worker before setting `VITE_WORLD_SYNC_ENABLED=true`.
 - The current pull request workflows do not deploy production.
 
-## 5. Security and authority limits
+## 5. CI validation
+
+- Backend check run 21 on commit `fe60b5192a9365d95540fab80a146d820717f425` passed.
+- Web build run 545 passed: 28 test files, 178 tests; TypeScript and Vite production build passed.
+- Hostinger workflow build passed; FTP upload was skipped because the event was a pull request.
+
+## 6. Security and authority limits
 
 This is a persistence and concurrency foundation, not a complete authoritative MMO simulation.
 
@@ -55,6 +61,6 @@ This is a persistence and concurrency foundation, not a complete authoritative M
 - CORS is permissive; rate limiting, abuse controls and authenticated sessions remain required.
 - No client should treat a successful write as proof that gameplay rules have been fully enforced.
 
-## 6. Next
+## 7. Next
 
 FA-WORLD-034: authoritative terrain/bridge validation, authenticated identity, zone-state schemas and rate limiting; then add remote snapshot subscription and reconciliation.
