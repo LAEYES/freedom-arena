@@ -30,6 +30,7 @@ import {
   buildEventBeaconMesh,
   buildBossMesh,
   buildWeatherParticleMesh,
+  buildWorldDressingMesh,
 } from './worldRenderer';
 
 type PlayerTile = { x: number; y: number };
@@ -194,6 +195,7 @@ export function World3DCanvas({
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
+    append(buildWorldDressingMesh(terrainMap.tiles, terrainMap.seed));
     zone.pointsOfInterest.forEach((_, index) => {
       const position = getPoiPosition(zone, index);
       const tile = getTerrainTile(terrainMap, position.x, position.y);
