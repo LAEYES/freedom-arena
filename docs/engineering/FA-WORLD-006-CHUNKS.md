@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendance : FA-WORLD-004
-- Statut : implémentation et tests ajoutés ; CI en attente.
+- Statut : VALIDATED — CI réussie.
 
 ## Découpage
 
@@ -57,4 +57,12 @@ Le chargement est synchrone depuis la carte générée en mémoire. Le contrat e
 - déchargement et clear,
 - paramètres invalides.
 
-La validation finale dépend de GitHub Actions.
+## Résultats de qualification
+
+- GitHub Actions — Web build, run #168 : **success**.
+- Vitest : **62/62 tests réussis**, 9 fichiers de test.
+- TypeScript : **success**.
+- Vite production build : **success**, 69 modules transformés.
+- Hostinger Deploy, run #95 : build réussi ; étape `Upload dist to Hostinger` **skipped** car pull request.
+
+**FA-WORLD-006 : VALIDATED.** Le découpage 16 × 16, la fenêtre visible et le cache LRU sont validés. Le cache conserve tous les chunks visibles même lorsque la fenêtre dépasse temporairement la capacité nominale.
