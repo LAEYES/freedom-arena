@@ -241,7 +241,7 @@ export function World3DCanvas({
         throw new Error('Attributs ou uniformes WebGL2 introuvables.');
       }
 
-      const initialChunks = chunkManager.loadAround(positionRef.current, 3);
+      const initialChunks = chunkManager.loadAround(positionRef.current, 4);
       const terrainTiles = initialChunks.flatMap(chunk => chunk.tiles);
       const terrainVertices = buildTerrainMesh(terrainTiles);
       terrainVertexCount = terrainVertices.length / 6;
