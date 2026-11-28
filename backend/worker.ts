@@ -1,5 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
+import { resolveServerCombat } from './gameCommands';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -155,7 +156,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
@@ -263,6 +264,62 @@ export default {
           return row ? json({ presence: presencePayload(row) }) : json({ error: "presence_not_found" }, 404);
         } catch {
           return json({ error: "world_heartbeat_failed" }, 500);
+        }
+      }
+
+      if (request.method === "POST" && action === "command") {
+        const body = await request.json().catch(() => null) as { commandId?: unknown; type?: unknown } | null;
+        if (!body || typeof body.commandId !== 'string'
+          || !/^[a-zA-Z0-9_-]{16,80}$/.test(body.commandId) || body.type !== 'combat') {
+          return json({ error: "invalid_world_command" }, 400);
+        }
+
+        try {
+          const prior = await env.DB.prepare(
+            "SELECT outcome_json FROM world_command_log WHERE command_id=? AND player_id=?"
+          ).bind(body.commandId, identity.subject).first<{ outcome_json: string }>();
+          if (prior) return json({ outcome: parseObject(prior.outcome_json), replayed: true });
+
+          const player = await env.DB.prepare(
+            "SELECT level,xp,victories,world_resources,world_threat FROM players WHERE id=?"
+          ).bind(identity.subject).first<{
+            level: number; xp: number; victories: number; world_resources: number; world_threat: number;
+          }>();
+          if (!player) return json({ error: "player_not_initialized" }, 409);
+
+          const presence = await env.DB.prepare(
+            "SELECT 1 AS present FROM world_player_presence WHERE player_id=? AND zone_id=?"
+          ).bind(identity.subject, zoneId).first<{ present: number }>();
+          if (!presence) return json({ error: "player_not_in_zone" }, 403);
+
+          const randomBytes = new Uint32Array(1);
+          crypto.getRandomValues(randomBytes);
+          const outcome = resolveServerCombat(player.level, randomBytes[0] / 4294967296);
+          const nextXp = player.xp + outcome.xpAwarded;
+          const nextLevel = 1 + Math.floor(nextXp / 100);
+          const resultJson = JSON.stringify(outcome);
+
+          const results = await env.DB.batch([
+            env.DB.prepare(`UPDATE players SET xp=?,level=?,victories=victories+?,
+              world_resources=world_resources+?,world_threat=MAX(1,world_threat+?),updated_at=CURRENT_TIMESTAMP
+              WHERE id=? AND EXISTS(SELECT 1 FROM world_player_presence WHERE player_id=? AND zone_id=?)
+              AND NOT EXISTS(SELECT 1 FROM world_command_log WHERE command_id=?)`)
+              .bind(nextXp, nextLevel, outcome.victory ? 1 : 0, outcome.resourcesAwarded,
+                outcome.threatDelta, identity.subject, identity.subject, zoneId, body.commandId),
+            env.DB.prepare(`INSERT INTO world_command_log(command_id,player_id,zone_id,command_type,outcome_json)
+              SELECT ?,?,?, 'combat',? WHERE changes()=1`)
+              .bind(body.commandId, identity.subject, zoneId, resultJson),
+          ]);
+          if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+            const duplicate = await env.DB.prepare(
+              "SELECT outcome_json FROM world_command_log WHERE command_id=? AND player_id=?"
+            ).bind(body.commandId, identity.subject).first<{ outcome_json: string }>();
+            if (duplicate) return json({ outcome: parseObject(duplicate.outcome_json), replayed: true });
+            return json({ error: "world_command_conflict" }, 409);
+          }
+          return json({ outcome, replayed: false });
+        } catch {
+          return json({ error: "world_command_failed" }, 500);
         }
       }
 
