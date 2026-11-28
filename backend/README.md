@@ -218,3 +218,24 @@ npm test
 ```
 
 This increment wires archetype tactics into authoritative PvE combat and supplies the tested grid planner for world-agent movement. Persistent roaming, patrol schedules, perception/line-of-sight and multi-enemy coordination remain future extensions. No D1 migration is required; the archetype is stored in the existing combat outcome JSON. No remote deployment or merge is performed by this PR.
+
+
+## FA-WORLD-043 authenticated PvP matchmaking
+
+Apply migration 009 after migrations 002–008 on an existing D1 database:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/009_fa_world_043_pvp_matchmaking.sql
+```
+
+Fresh installations receive the same tables through `schema.sql`.
+
+Authenticated endpoints:
+
+- `POST /world/:zoneId/pvp/queue`: enqueue the authenticated player. The Worker obtains level from D1 and requires fresh presence in the requested zone. Initial rating is 1000. Matching currently requires the same zone, a level difference no greater than 10, and a rating window that expands by 50 points every 10 seconds from 100 to a maximum of 800.
+- `GET /world/:zoneId/pvp/status`: returns the caller's own queue or match state.
+- `POST /world/:zoneId/pvp/cancel`: cancels only the caller's queued entry.
+
+The client cannot nominate an opponent, set rating/level, or create a match record. D1 stores the match and unique participant rows; the participant uniqueness constraint prevents one player from being assigned to concurrent matches. The queue is rate-limited by the existing authenticated route-family limiter.
+
+This increment implements matchmaking and match registration only. It does not yet implement PvP turn execution, combat settlement, Elo updates after a completed duel, disconnect/timeout adjudication, rewards or rematch cleanup. Those require the next authoritative duel lifecycle increment. Apply migration 009 before deploying this Worker. No remote migration, deployment or PR merge is performed by this change.
