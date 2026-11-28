@@ -139,7 +139,9 @@ export function createIsometricCamera(config: IsometricCameraConfig): IsometricC
     viewMatrix,
     projectionMatrix,
     viewProjectionMatrix: multiplyMat4(projectionMatrix, viewMatrix),
-    pixelsPerWorldUnit: projectionMode === 'perspective'\n      ? viewportHeight / (2 * Math.tan(fovRadians / 2) * distance)\n      : viewportHeight / orthographicHeight,
+    pixelsPerWorldUnit: projectionMode === 'perspective'
+      ? viewportHeight / (2 * Math.tan(fovRadians / 2) * distance)
+      : viewportHeight / orthographicHeight,
   };
 }
 
