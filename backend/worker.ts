@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, type EquipmentSlot, type StoredCard } from './combatEngine';
+import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, resolveVictoryLoot, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -160,7 +160,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state|command|rest|equip|inventory)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
@@ -271,6 +271,26 @@ export default {
         }
       }
 
+      if (request.method === "GET" && action === "inventory") {
+        try {
+          const present = await env.DB.prepare("SELECT 1 AS present FROM world_player_presence WHERE player_id=? AND zone_id=?")
+            .bind(identity.subject, zoneId).first<{ present: number }>();
+          if (!present) return json({ error: "player_not_in_zone" }, 403);
+          const [items, recent] = await Promise.all([
+            env.DB.prepare("SELECT item_id,quantity,updated_at FROM world_inventory WHERE player_id=? AND quantity>0 ORDER BY item_id")
+              .bind(identity.subject).all<{ item_id: string; quantity: number; updated_at: string }>(),
+            env.DB.prepare("SELECT item_id,quantity,reason,created_at FROM world_inventory_log WHERE player_id=? ORDER BY created_at DESC LIMIT 30")
+              .bind(identity.subject).all<Record<string, unknown>>(),
+          ]);
+          return json({
+            items: items.results.map(item => ({ itemId: item.item_id, quantity: item.quantity, updatedAt: item.updated_at })),
+            recentTransactions: recent.results.map(entry => ({
+              itemId: entry.item_id, quantity: entry.quantity, reason: entry.reason, createdAt: entry.created_at,
+            })),
+          });
+        } catch { return json({ error: "inventory_read_failed" }, 500); }
+      }
+
       if (request.method === "POST" && action === "command") {
         const body = await request.json().catch(() => null) as { commandId?: unknown; type?: unknown } | null;
         if (!body || typeof body.commandId !== 'string'
@@ -311,7 +331,8 @@ export default {
           );
           const nextXp = player.xp + outcome.xpAwarded;
           const nextLevel = 1 + Math.floor(nextXp / 100);
-          const resultJson = JSON.stringify(outcome);
+          const loot = resolveVictoryLoot(outcome.victory, rolls);
+          const resultJson = JSON.stringify({ ...outcome, loot });
 
           const results = await env.DB.batch([
             env.DB.prepare(`UPDATE players SET xp=?,level=?,victories=victories+?,
@@ -323,6 +344,13 @@ export default {
             env.DB.prepare(`INSERT INTO world_command_log(command_id,player_id,zone_id,command_type,outcome_json)
               SELECT ?,?,?, 'combat',? WHERE changes()=1`)
               .bind(body.commandId, identity.subject, zoneId, resultJson),
+            ...loot.map(drop => env.DB.prepare(`INSERT INTO world_inventory(player_id,item_id,quantity,updated_at)
+              SELECT ?,?,?,CURRENT_TIMESTAMP WHERE EXISTS(SELECT 1 FROM world_command_log WHERE command_id=? AND player_id=?)
+              ON CONFLICT(player_id,item_id) DO UPDATE SET quantity=MIN(999,world_inventory.quantity+excluded.quantity),updated_at=CURRENT_TIMESTAMP`)
+              .bind(identity.subject, drop.itemId, drop.quantity, body.commandId, identity.subject)),
+            ...loot.map(drop => env.DB.prepare(`INSERT INTO world_inventory_log(command_id,player_id,zone_id,item_id,quantity,reason)
+              SELECT ?,?,?,?,?, 'combat_loot' WHERE EXISTS(SELECT 1 FROM world_command_log WHERE command_id=? AND player_id=? )`)
+              .bind(body.commandId + ":" + drop.itemId, identity.subject, zoneId, drop.itemId, drop.quantity, body.commandId, identity.subject)),
           ]);
           if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
             const duplicate = await env.DB.prepare(
@@ -331,7 +359,7 @@ export default {
             if (duplicate) return json({ outcome: parseObject(duplicate.outcome_json), replayed: true });
             return json({ error: "world_command_conflict" }, 409);
           }
-          return json({ outcome, replayed: false });
+          return json({ outcome: { ...outcome, loot }, replayed: false });
         } catch {
           return json({ error: "world_command_failed" }, 500);
         }

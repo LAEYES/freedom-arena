@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { buildEquippedCombatant, buildPlayerCombatant, normalizeEquipment, resolveCombatEncounter } from "./combatEngine.ts";
+import { buildEquippedCombatant, buildPlayerCombatant, normalizeEquipment, resolveCombatEncounter, resolveVictoryLoot } from "./combatEngine.ts";
 
 test("equipped card increases combat attributes", () => {
   const base = buildPlayerCombatant(10, null);
@@ -99,4 +99,21 @@ test("combat stats use all equipped slots while skill stays on weapon", () => {
   const result = resolveCombatEncounter(10, 5, cards, "weapon", Array(40).fill(0.5), null, [], loadout);
   assert.ok(result.player.defense > buildPlayerCombatant(10, cards[0]).defense);
   assert.equal(result.equippedCardId, "weapon");
+});
+
+
+test("victory loot is server-deterministic, bounded and absent on defeat", () => {
+  const rolls = Array(40).fill(0.1);
+  const first = resolveVictoryLoot(true, rolls);
+  const second = resolveVictoryLoot(true, rolls);
+  assert.deepEqual(first, second);
+  assert.ok(first.length <= 3);
+  assert.ok(first.every(drop => drop.quantity >= 1 && drop.quantity <= 3));
+  assert.deepEqual(resolveVictoryLoot(false, rolls), []);
+});
+
+test("loot resolver ignores missing or invalid random values safely", () => {
+  const drops = resolveVictoryLoot(true, []);
+  assert.ok(Array.isArray(drops));
+  assert.ok(drops.every(drop => ["scrap_metal", "arcane_shard", "medicinal_herb"].includes(drop.itemId)));
 });
