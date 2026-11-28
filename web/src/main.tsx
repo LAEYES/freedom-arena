@@ -381,7 +381,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, equippedCard,
       dynamicCtx.rotate(playerMotion.rotation * Math.PI / 180);
       dynamicCtx.globalAlpha = playerMotion.opacity;
       dynamicCtx.scale(playerMotion.scale, playerMotion.scale);
-      drawCharacterSprite(dynamicCtx, 0, 0, 40, { faction: playerFaction, hostile: false, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame), facing: playerFacing.current, equipment: equippedCard ? getCharacterEquipmentVisual(equippedCard.rarity, equippedCard.power, equippedCard.defense, equippedCard.vitality) : undefined });
+      drawCharacterSprite(dynamicCtx, 0, 0, 40, { faction: playerFaction, hostile: false, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame), facing: playerFacing.current, equipment: equippedCard ? getCharacterEquipmentVisual(equippedCard.rarity) : undefined });
       drawCharacterEffects(dynamicCtx, 0, 0, { faction: playerFaction, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame), size: 40 });
       dynamicCtx.restore();
       dynamicCtx.fillStyle = '#fff';
