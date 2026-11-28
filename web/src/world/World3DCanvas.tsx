@@ -3,6 +3,8 @@ import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager } from './chunks';
 import { findTerrainPath } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
+import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
+import { tileKey } from './navigation';
 import { generateTerrainMap, getTerrainTile } from './terrain';
 import {
   getZone,
@@ -133,6 +135,7 @@ export function World3DCanvas({
   const positionRef = useRef({ i: worldTile.x, j: worldTile.y });
   const movementRef = useRef<MovementState | null>(null);
   const npcAgentsRef = useRef<NpcAgent[]>([]);
+  const npcBehaviorAgentsRef = useRef<Array<NpcBehaviorAgent | null>>([]);
   const cameraRef = useRef<IsometricCamera | null>(null);
   const onTileMoveRef = useRef(onTileMove);
   const onSignalSelectRef = useRef(onSignalSelect);
@@ -173,7 +176,10 @@ export function World3DCanvas({
     [zoneId, worldThreat, worldResources, explorationCount],
   );
   const initialNpcAgents = useMemo(() => createNpcAgents(terrainMap, sceneNpcs), [terrainMap, sceneNpcs]);
-  useEffect(() => { npcAgentsRef.current = initialNpcAgents; }, [initialNpcAgents]);
+  useEffect(() => {
+    npcAgentsRef.current = initialNpcAgents;
+    npcBehaviorAgentsRef.current = sceneNpcs.map(() => null);
+  }, [initialNpcAgents, sceneNpcs]);
   const sceneVertices = useMemo(() => {
     const output: number[] = [];
     const append = (mesh: Float32Array) => { for (const value of mesh) output.push(value); };
@@ -357,16 +363,51 @@ export function World3DCanvas({
 
         npcAgentsRef.current = advanceNpcAgents(npcAgentsRef.current, delta);
         const npcOutput: number[] = [];
+        const playerTile = { i: positionRef.current.i, j: positionRef.current.j };
+        const patrolPoses = npcAgentsRef.current.map(getNpcAgentPose);
         for (let index = 0; index < sceneNpcs.length; index++) {
           const actor = sceneNpcs[index];
-          const agent = npcAgentsRef.current[index];
-          if (!agent) continue;
-          const pose = getNpcAgentPose(agent);
-          const fromTile = getTerrainTile(terrainMap, agent.path[agent.fromIndex].i, agent.path[agent.fromIndex].j);
-          const toTile = getTerrainTile(terrainMap, agent.path[agent.toIndex].i, agent.path[agent.toIndex].j);
+          const patrolAgent = npcAgentsRef.current[index];
+          if (!patrolAgent) continue;
+          const patrolPose = patrolPoses[index];
+          let behaviorAgent = npcBehaviorAgentsRef.current[index];
+          if (!behaviorAgent && Math.abs(Math.round(patrolPose.x) - playerTile.i) + Math.abs(Math.round(patrolPose.y) - playerTile.j) <= 7) {
+            const patrolTile = { i: Math.round(patrolPose.x), j: Math.round(patrolPose.y) };
+            const home = { i: actor.x, j: actor.y };
+            const created = createNpcBehaviorAgent(actor.id, home);
+            behaviorAgent = { ...created, position: patrolTile, previousPosition: patrolTile };
+          }
+
+          let pose = patrolPose;
+          let groundZ: number;
+          if (behaviorAgent) {
+            const blockedTiles = new Set<string>();
+            for (let otherIndex = 0; otherIndex < sceneNpcs.length; otherIndex++) {
+              if (otherIndex === index) continue;
+              const otherBehavior = npcBehaviorAgentsRef.current[otherIndex];
+              const otherPose = otherBehavior
+                ? getNpcBehaviorPose(otherBehavior)
+                : patrolPoses[otherIndex];
+              if (otherPose) blockedTiles.add(tileKey(Math.round(otherPose.x), Math.round(otherPose.y)));
+            }
+            behaviorAgent = updateNpcBehavior(terrainMap, behaviorAgent, playerTile, delta, { blockedTiles });
+            npcBehaviorAgentsRef.current[index] = behaviorAgent;
+            pose = getNpcBehaviorPose(behaviorAgent);
+            const fromTile = getTerrainTile(terrainMap, behaviorAgent.position.i, behaviorAgent.position.j);
+            const toTile = getTerrainTile(terrainMap, behaviorAgent.path[behaviorAgent.pathIndex + 1]?.i ?? behaviorAgent.position.i,
+              behaviorAgent.path[behaviorAgent.pathIndex + 1]?.j ?? behaviorAgent.position.j);
+            const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
+            if (!fromTile || !toTile || !tile?.walkable) continue;
+            groundZ = terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
+          } else {
+            const fromTile = getTerrainTile(terrainMap, patrolAgent.path[patrolAgent.fromIndex].i, patrolAgent.path[patrolAgent.fromIndex].j);
+            const toTile = getTerrainTile(terrainMap, patrolAgent.path[patrolAgent.toIndex].i, patrolAgent.path[patrolAgent.toIndex].j);
+            const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
+            if (!fromTile || !toTile || !tile?.walkable) continue;
+            groundZ = terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
+          }
           const tile = getTerrainTile(terrainMap, Math.round(pose.x), Math.round(pose.y));
-          if (!fromTile || !toTile || !tile?.walkable) continue;
-          const groundZ = terrainWorldHeight(fromTile) + (terrainWorldHeight(toTile) - terrainWorldHeight(fromTile)) * pose.progress;
+          if (!tile?.walkable) continue;
           const activityAmount = actor.activity === 'patrol' ? 0.72 : actor.activity === 'defend' ? 0.42 : 0.24;
           const phase = time * (actor.activity === 'patrol' ? 0.0048 : 0.0022) + npcAnimationPhase(actor.id);
           const mesh = buildNpcMesh(actor, tile, { phase, amount: activityAmount, x: pose.x, y: pose.y, groundZ });
@@ -475,8 +516,12 @@ export function World3DCanvas({
           17,
         );
         if (tile) {
-          const npcs = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
-          const npc = npcs.find(actor => actor.x === tile.i && actor.y === tile.j);
+          const npcIndex = sceneNpcs.findIndex((actor, index) => {
+            const behavior = npcBehaviorAgentsRef.current[index];
+            const pose = behavior ? getNpcBehaviorPose(behavior) : patrolPoses[index];
+            return pose && Math.round(pose.x) === tile.i && Math.round(pose.y) === tile.j;
+          });
+          const npc = npcIndex >= 0 ? sceneNpcs[npcIndex] : undefined;
           const poiIndex = zone.pointsOfInterest.findIndex((_, index) => {
             const point = getPoiPosition(zone, index);
             return point.x === tile.i && point.y === tile.j;
