@@ -704,4 +704,8 @@ export default {
 
     return json({ error: "not_found" }, 404);
   },
+
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(adjudicateExpiredPvpMatches(env.DB).catch(() => 0).then(() => undefined));
+  },
 };
