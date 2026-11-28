@@ -27,6 +27,13 @@ The local catalog is device-local; it is not synchronized to Supabase or GitHub.
 ## Validation
 Unit tests cover stable IDs, deterministic random sequences, all biome/material palette combinations, repeat-edge cell values and the 64 px world-grid contract. GitHub Actions runs `npm run test` and `npm run build` for changes under `web/**`.
 
+## Character sprite factory
+- Faction palettes: Aegis, Nomads, Eclipse and Neutral.
+- Roles: vanguard, scout and mystic.
+- Pose states: idle, walk and attack with deterministic frame offsets.
+- Character Studio exports a 192 px PNG preview and exposes four selectable frame states.
+- NPC rendering now uses the same sprite factory as the editor preview.
+
 ## Known limits
 - The world renderer is still Canvas2D and top-down/pixel-stylized; this is not yet a production isometric 3D renderer.
 - Character and building authoring, skeleton animation, VFX authoring and atlas packing are not implemented yet.
