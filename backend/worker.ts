@@ -1,3 +1,5 @@
+import { isServerTraversable, validateServerMove } from './worldRules';
+
 export interface Env {
   DB: D1Database;
 }
@@ -155,6 +157,9 @@ export default {
         if (!validPlayerId(body?.playerId) || !isWorldPosition(body?.worldTile)) {
           return json({ error: "invalid_world_join" }, 400);
         }
+        if (!isServerTraversable(body.worldTile.x, body.worldTile.y)) {
+          return json({ error: "world_spawn_blocked" }, 422);
+        }
         try {
           const row = await env.DB.prepare(`INSERT INTO world_player_presence
             (player_id,zone_id,tile_x,tile_y,revision,updated_at)
@@ -181,8 +186,13 @@ export default {
           || !Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 0) {
           return json({ error: "invalid_world_move" }, 400);
         }
-        const distance = Math.abs(body.to.x - body.from.x) + Math.abs(body.to.y - body.from.y);
-        if (distance !== 1) return json({ error: "movement_must_be_cardinal_adjacent" }, 422);
+        const movementValidation = validateServerMove(body.from, body.to);
+        if (movementValidation === 'invalid_step') {
+          return json({ error: "movement_must_be_cardinal_adjacent" }, 422);
+        }
+        if (movementValidation === 'terrain_blocked') {
+          return json({ error: "movement_terrain_blocked" }, 422);
+        }
         const expectedRevision = body.expectedRevision as number;
         const eventId = body.playerId + ':' + (expectedRevision + 1);
         try {
