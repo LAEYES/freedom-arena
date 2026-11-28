@@ -475,10 +475,6 @@ export function World3DCanvas({
     const gpuFrameMonitor = new FrameTimeMonitor(90);
     const adaptiveRenderScale = new AdaptiveRenderScale();
     const renderScaleRef = { current: 1 };
-    const gpuTimerExtension = gl?.getExtension('EXT_disjoint_timer_query_webgl2') as {
-      TIME_ELAPSED_EXT: number;
-      GPU_DISJOINT_EXT: number;
-    } | null;
     const pendingGpuQueries: WebGLQuery[] = [];
     let activeGpuQuery: WebGLQuery | null = null;
     let lastPerformanceUpdate = 0;
@@ -490,6 +486,10 @@ export function World3DCanvas({
         powerPreference: 'high-performance',
       });
       if (!gl) throw new Error('WebGL2 indisponible sur cet appareil. Utilisez le mode Canvas 2D.');
+      const gpuTimerExtension = gl.getExtension('EXT_disjoint_timer_query_webgl2') as {
+        TIME_ELAPSED_EXT: number;
+        GPU_DISJOINT_EXT: number;
+      } | null;
       program = createProgram(gl);
       vegetationProgram = createVegetationProgram(gl);
       positionLocation = gl.getAttribLocation(program, 'aPosition');
