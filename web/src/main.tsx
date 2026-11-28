@@ -9,7 +9,8 @@ import { CharacterStudio } from './graphics/CharacterStudio';
 import { TerrainEditor } from './graphics/TerrainEditor';
 import { BuildingStudio } from './graphics/BuildingStudio';
 import { AnimationStudio } from './graphics/AnimationStudio';
-import { drawCharacterSprite, type CharacterFaction } from './graphics/characterFactory';
+import { drawCharacterSprite, type CharacterFaction, type CharacterPose } from './graphics/characterFactory';
+import { CHARACTER_ANIMATION_CLIPS, evaluateAnimation } from './graphics/animationEngine';
 import { createAsset, paintProceduralTile, type Biome } from './graphics/assetFactory';
 import { canEnterZone, canWalkTile,  findTilePath, getNearestPoi, interactWithPoi, interactWithNpc, getReachableZones, getZone, getZoneStatus, generateScenario, generateWorldEvent, getZoneDynamicModifiers, getZoneEnvironment, getZoneNpcs, getZoneFactionPressure, getFactionPressureLabel, getWorldEventProgress, getWorldEventPhase, getWorldEventPoint, getTile, moveTile, zones } from './world';
 import { createEncounter, getCombatReward, getCombatSummary, playerAttack, type CombatState } from './combat';
@@ -194,7 +195,7 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         const mapPoi=zone.pointsOfInterest.map((name,index)=>({name,x:Math.floor((index+1)*60/(zone.pointsOfInterest.length+1)),y:5+index*8}));
         mapPoi.forEach((poi)=>{const sx=(poi.x-cameraX)*tile+tile/2,sy=(poi.y-cameraY)*tile+tile/2;if(sx<-40||sy<-40||sx>rect.width+40||sy>rect.height+40)return;drawPixelPoi(sceneCtx,sx,sy,30);sceneCtx.fillStyle='#ead9ad';sceneCtx.font='600 10px Inter,sans-serif';sceneCtx.fillText(poi.name,sx+20,sy+3);});
         zone.pointsOfInterest.forEach((name,index)=>{const x=24+((index+1)*(rect.width-48))/(zone.pointsOfInterest.length+1),y=rect.height*(index%2===0?.42:.68);sceneCtx.fillStyle='#9db4e8';sceneCtx.beginPath();sceneCtx.arc(x,y,7,0,Math.PI*2);sceneCtx.fill();sceneCtx.fillStyle='#c9d7f5';sceneCtx.font='11px Inter,sans-serif';sceneCtx.fillText(name,x+10,y+4);});
-        npcs.forEach((npc)=>{const sx=(npc.x-cameraX)*tile+tile/2,sy=(npc.y-cameraY)*tile+tile/2;if(sx<-48||sy<-48||sx>rect.width+48||sy>rect.height+48)return;drawPixelCharacter(sceneCtx,sx,sy,34,npc.faction as CharacterFaction,npc.faction==='Eclipse');sceneCtx.fillStyle='#e5ebfa';sceneCtx.font='600 9px Inter,sans-serif';sceneCtx.fillText(npc.activity.toUpperCase(),sx+22,sy+3);});
+        // NPC sprites are rendered on the dynamic layer so animation never invalidates terrain caches.
         const pressure=getZoneFactionPressure(zone,factionInfluence);
         const pressureColor=pressure.status==='dominant'?'rgba(120,180,255,.75)':pressure.status==='contested'?'rgba(220,190,110,.75)':pressure.status==='weak'?'rgba(230,110,130,.8)':'rgba(160,180,210,.65)';
         sceneCtx.strokeStyle=pressureColor;sceneCtx.lineWidth=2;sceneCtx.setLineDash([6,4]);sceneCtx.strokeRect(8,8,rect.width-16,rect.height-16);sceneCtx.setLineDash([]);
@@ -211,6 +212,25 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
       ctx.drawImage(sceneCanvas, 0, 0, rect.width, rect.height);
       dynamicCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
       dynamicCtx.clearRect(0, 0, rect.width, rect.height);
+      const animatedNpcs=getZoneNpcs(getZone(zoneId),worldThreat,worldResources,explorationCount);
+      animatedNpcs.forEach(npc=>{
+        const sx=(npc.x-cameraX)*tile+tile/2,sy=(npc.y-cameraY)*tile+tile/2;
+        if(sx<-48||sy<-48||sx>rect.width+48||sy>rect.height+48)return;
+        const activity=String(npc.activity).toLowerCase();
+        const pose:CharacterPose=activity.includes('patrol')||activity.includes('walk')?'walk':'idle';
+        const clip=CHARACTER_ANIMATION_CLIPS[pose];
+        let seed=0;for(let i=0;i<npc.id.length;i++)seed=(seed*31+npc.id.charCodeAt(i))>>>0;
+        const frame=(fxTime.current/1000)*clip.fps+(seed%clip.duration);
+        const motion=evaluateAnimation(clip,frame);
+        dynamicCtx.save();
+        dynamicCtx.translate(sx+motion.x,sy+motion.y);
+        dynamicCtx.rotate(motion.rotation*Math.PI/180);
+        dynamicCtx.globalAlpha=motion.opacity;
+        dynamicCtx.scale(motion.scale,motion.scale);
+        drawCharacterSprite(dynamicCtx,0,0,34,{faction:npc.faction as CharacterFaction,hostile:npc.faction==='Eclipse',role:npc.faction==='Nomads'?'scout':npc.faction==='Eclipse'?'mystic':'vanguard',pose,frame:Math.floor(frame)});
+        dynamicCtx.restore();
+        dynamicCtx.fillStyle='#e5ebfa';dynamicCtx.font='600 9px Inter,sans-serif';dynamicCtx.fillText(activity.toUpperCase(),sx+22,sy+3);
+      });
       const currentRemotePlayers = remotePlayersRef.current.filter(isFreshRemotePresence);
       const eventPhase=getWorldEventPhase(worldEvent,worldEventAgeRef.current).toUpperCase();
       const eventPoint=getWorldEventPoint(worldEvent);
