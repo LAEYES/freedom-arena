@@ -124,7 +124,7 @@ export default {
       return json({ ok: true, service: "freedom-arena-api", worldSync: "v1" });
     }
 
-    const worldRoute = url.pathname.match(/^\\/world\\/([a-z0-9-]{1,48})\\/(snapshot|join|move|heartbeat|state)$/);
+    const worldRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/(snapshot|join|move|heartbeat|state)$/);
     if (worldRoute) {
       const zoneId = worldRoute[1];
       const action = worldRoute[2];
