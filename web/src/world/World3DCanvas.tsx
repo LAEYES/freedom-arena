@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, ChunkStreamScheduler, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
+import { resolveWorldLighting } from './worldLighting';
 import { selectWorldLod } from './worldLod';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
@@ -96,6 +97,7 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
     uniform float uTime;
     uniform float uWeatherMotion;
     out vec3 vColor;
+    out vec3 vWorldPosition;
     void main() {
       vec3 animatedPosition = aPosition;
       float phase = uTime * 1.35 + aPosition.x * 0.17 + aPosition.y * 0.13;
@@ -103,20 +105,34 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
       animatedPosition.y += cos(phase * 0.73) * 0.022 * uWeatherMotion;
       animatedPosition.z += sin(phase * 0.91) * 0.018 * uWeatherMotion;
       gl_Position = uViewProjection * vec4(animatedPosition, 1.0);
+      vWorldPosition = animatedPosition;
       vColor = aColor;
     }
   `;
   const fragmentSource = `#version 300 es
     precision highp float;
     in vec3 vColor;
+    in vec3 vWorldPosition;
     uniform vec3 uTint;
+    uniform vec3 uLightDirection;
+    uniform float uAmbient;
+    uniform float uDirect;
+    uniform float uRimStrength;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
     uniform float uChunkOpacity;
     out vec4 outColor;
     void main() {
+      vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
+      if (!gl_FrontFacing) normal = -normal;
+      vec3 viewDirection = normalize(vec3(0.0, 0.0, 1.0) - vWorldPosition * 0.002);
+      float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
+      float rim = pow(1.0 - max(dot(normal, viewDirection), 0.0), 2.2) * uRimStrength;
+      float luminance = dot(vColor, vec3(0.2126, 0.7152, 0.0722));
+      float materialResponse = mix(0.92, 1.04, smoothstep(0.18, 0.78, luminance));
+      vec3 lighting = vec3(uAmbient + diffuse * uDirect) * uTint;
+      vec3 litColor = vColor * lighting * materialResponse + vec3(rim);
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
-      vec3 litColor = vColor * uTint;
       vec3 transitioned = mix(uFogColor, litColor, uChunkOpacity);
       outColor = vec4(mix(transitioned, uFogColor, depthFog), 1.0);
     }
@@ -148,22 +164,34 @@ function createVegetationProgram(gl: WebGL2RenderingContext): WebGLProgram {
     in vec3 aInstanceTint;
     uniform mat4 uViewProjection;
     out vec3 vColor;
+    out vec3 vWorldPosition;
     void main() {
       vec3 worldPosition = aPosition * aInstanceScale + aInstanceOffset;
       gl_Position = uViewProjection * vec4(worldPosition, 1.0);
+      vWorldPosition = worldPosition;
       vColor = aColor * aInstanceTint;
     }
   `);
   const fragment = createShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
     precision highp float;
     in vec3 vColor;
+    in vec3 vWorldPosition;
+    uniform vec3 uLightDirection;
+    uniform float uAmbient;
+    uniform float uDirect;
+    uniform float uRimStrength;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
     uniform float uChunkOpacity;
     out vec4 outColor;
     void main() {
+      vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
+      if (!gl_FrontFacing) normal = -normal;
+      float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
+      float rim = pow(1.0 - abs(normal.z), 2.0) * uRimStrength;
+      vec3 litVegetation = vColor * (uAmbient + diffuse * uDirect) + vec3(rim);
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
-      vec3 transitioned = mix(uFogColor, vColor, uChunkOpacity);
+      vec3 transitioned = mix(uFogColor, litVegetation, uChunkOpacity);
       outColor = vec4(mix(transitioned, uFogColor, depthFog), 1.0);
     }
   `);
@@ -410,6 +438,10 @@ export function World3DCanvas({
     let vegetationMatrixLocation: WebGLUniformLocation | null = null;
     let vegetationFogColorLocation: WebGLUniformLocation | null = null;
     let vegetationFogAmountLocation: WebGLUniformLocation | null = null;
+    let vegetationLightDirectionLocation: WebGLUniformLocation | null = null;
+    let vegetationAmbientLocation: WebGLUniformLocation | null = null;
+    let vegetationDirectLocation: WebGLUniformLocation | null = null;
+    let vegetationRimLocation: WebGLUniformLocation | null = null;
     const terrainChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     const sceneChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let avatarBuffer: WebGLBuffer | null = null;
@@ -422,6 +454,10 @@ export function World3DCanvas({
     let colorLocation = -1;
     let matrixLocation: WebGLUniformLocation | null = null;
     let tintLocation: WebGLUniformLocation | null = null;
+    let lightDirectionLocation: WebGLUniformLocation | null = null;
+    let ambientLocation: WebGLUniformLocation | null = null;
+    let directLocation: WebGLUniformLocation | null = null;
+    let rimLocation: WebGLUniformLocation | null = null;
     let fogColorLocation: WebGLUniformLocation | null = null;
     let fogAmountLocation: WebGLUniformLocation | null = null;
     let timeLocation: WebGLUniformLocation | null = null;
@@ -445,12 +481,16 @@ export function World3DCanvas({
       colorLocation = gl.getAttribLocation(program, 'aColor');
       matrixLocation = gl.getUniformLocation(program, 'uViewProjection');
       tintLocation = gl.getUniformLocation(program, 'uTint');
+      lightDirectionLocation = gl.getUniformLocation(program, 'uLightDirection');
+      ambientLocation = gl.getUniformLocation(program, 'uAmbient');
+      directLocation = gl.getUniformLocation(program, 'uDirect');
+      rimLocation = gl.getUniformLocation(program, 'uRimStrength');
       fogColorLocation = gl.getUniformLocation(program, 'uFogColor');
       fogAmountLocation = gl.getUniformLocation(program, 'uFogAmount');
       timeLocation = gl.getUniformLocation(program, 'uTime');
       weatherMotionLocation = gl.getUniformLocation(program, 'uWeatherMotion');
       chunkOpacityLocation = gl.getUniformLocation(program, 'uChunkOpacity');
-      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation || !timeLocation || !weatherMotionLocation || !chunkOpacityLocation) {
+      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !lightDirectionLocation || !ambientLocation || !directLocation || !rimLocation || !fogColorLocation || !fogAmountLocation || !timeLocation || !weatherMotionLocation || !chunkOpacityLocation) {
         throw new Error('Attributs ou uniformes WebGL2 introuvables.');
       }
 
@@ -480,8 +520,12 @@ export function World3DCanvas({
       vegetationMatrixLocation = gl.getUniformLocation(vegetationProgram, 'uViewProjection');
       vegetationFogColorLocation = gl.getUniformLocation(vegetationProgram, 'uFogColor');
       vegetationFogAmountLocation = gl.getUniformLocation(vegetationProgram, 'uFogAmount');
+      vegetationLightDirectionLocation = gl.getUniformLocation(vegetationProgram, 'uLightDirection');
+      vegetationAmbientLocation = gl.getUniformLocation(vegetationProgram, 'uAmbient');
+      vegetationDirectLocation = gl.getUniformLocation(vegetationProgram, 'uDirect');
+      vegetationRimLocation = gl.getUniformLocation(vegetationProgram, 'uRimStrength');
       vegetationChunkOpacityLocation = gl.getUniformLocation(vegetationProgram, 'uChunkOpacity');
-      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation || !vegetationChunkOpacityLocation) {
+      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation || !vegetationLightDirectionLocation || !vegetationAmbientLocation || !vegetationDirectLocation || !vegetationRimLocation || !vegetationChunkOpacityLocation) {
         throw new Error('Uniformes du programme de végétation instanciée introuvables.');
       }
 
@@ -566,15 +610,14 @@ export function World3DCanvas({
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         gl.useProgram(program);
         gl.uniformMatrix4fv(matrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
-        const ambient = environment.cycle === 'night' ? [0.58, 0.66, 0.88]
-          : environment.cycle === 'dawn' ? [1.0, 0.78, 0.62]
-          : environment.cycle === 'dusk' ? [0.94, 0.70, 0.60] : [1.0, 1.0, 1.0];
-        const fog = environment.weather === 'frost' ? [0.58, 0.70, 0.82]
-          : environment.weather === 'storm' ? [0.16, 0.22, 0.34]
-          : [0.30, 0.40, 0.52];
-        gl.uniform3fv(tintLocation, ambient);
-        gl.uniform3fv(fogColorLocation, fog);
-        gl.uniform1f(fogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
+        const lighting = resolveWorldLighting(environment.cycle, environment.weather);
+        gl.uniform3fv(tintLocation, lighting.tint);
+        gl.uniform3fv(lightDirectionLocation, lighting.lightDirection);
+        gl.uniform1f(ambientLocation, lighting.ambient);
+        gl.uniform1f(directLocation, lighting.direct);
+        gl.uniform1f(rimLocation, lighting.rim);
+        gl.uniform3fv(fogColorLocation, lighting.fogColor);
+        gl.uniform1f(fogAmountLocation, lighting.fogAmount);
         gl.uniform1f(timeLocation, time * 0.001);
         gl.uniform1f(weatherMotionLocation, 0);
         gl.uniform1f(chunkOpacityLocation, 1);
@@ -712,8 +755,12 @@ export function World3DCanvas({
         if (vegetationInstanceCount > 0 && vegetationProgram && vegetationTemplateBuffer && vegetationInstanceBuffer) {
           gl.useProgram(vegetationProgram);
           gl.uniformMatrix4fv(vegetationMatrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
-          gl.uniform3fv(vegetationFogColorLocation, fog);
-          gl.uniform1f(vegetationFogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
+          gl.uniform3fv(vegetationFogColorLocation, lighting.fogColor);
+          gl.uniform1f(vegetationFogAmountLocation, lighting.fogAmount);
+          gl.uniform3fv(vegetationLightDirectionLocation, lighting.lightDirection);
+          gl.uniform1f(vegetationAmbientLocation, lighting.ambient);
+          gl.uniform1f(vegetationDirectLocation, lighting.direct);
+          gl.uniform1f(vegetationRimLocation, lighting.rim);
           gl.bindBuffer(gl.ARRAY_BUFFER, vegetationTemplateBuffer);
           gl.enableVertexAttribArray(0);
           gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
