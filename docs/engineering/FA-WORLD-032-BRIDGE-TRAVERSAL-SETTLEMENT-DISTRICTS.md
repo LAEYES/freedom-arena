@@ -1,6 +1,6 @@
 # FA-WORLD-032 — Bridge traversal and settlement districts
 
-Status: implementation committed; CI validation pending.
+Status: implemented and CI validated.
 
 ## 1. Bridge links and navigation
 
@@ -32,7 +32,14 @@ Status: implementation committed; CI validation pending.
 - Settlement generation: deterministic output, unique walkable lots, five interaction roles, lookup and input validation.
 - Rendering: finite deterministic geometry for all five structure silhouettes.
 
-## 4. Limits
+## 4. CI validation
+
+- GitHub Actions Web build run 525 on commit `1c560021990efb792b2917ca4ebd83f64eb816eb` passed.
+- 27 test files passed; 176 tests passed.
+- TypeScript project build and Vite production build passed.
+- Hostinger workflow build passed; FTP upload was skipped because the event was a pull request.
+
+## 5. Limits
 
 - Bridges are currently one water tile wide and cardinal only.
 - No multi-cell spans, diagonal bridges, bridge damage or ownership state.
@@ -41,6 +48,6 @@ Status: implementation committed; CI validation pending.
 - The parent 2D movement model is not changed; the bridge-aware movement adapter is used by the 3D renderer only.
 - No MMO authority or persistence is introduced by this lot.
 
-## 5. Next
+## 6. Next
 
 FA-WORLD-033: server-authoritative world state, chunk/zone synchronization, persistence and conflict-safe player movement.
