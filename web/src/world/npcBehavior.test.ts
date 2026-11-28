@@ -32,7 +32,19 @@ describe('local NPC tactical behavior', () => {
     const second = updateNpcBehavior(map, first, { i: 13, j: 11 }, 16);
     const replay = updateNpcBehavior(map, first, { i: 13, j: 11 }, 16);
     expect(second).toEqual(replay);
-    expect(second.targetKey).toBe('13:11');
+    expect(second.targetKey).toContain('13:11>');
+  });
+
+  it('stops pursuit on a walkable tile adjacent to the player', () => {
+    let agent = createNpcBehaviorAgent('npc-adjacent', { i: 10, j: 10 });
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 16);
+    agent = updateNpcBehavior(map, agent, { i: 13, j: 10 }, 100);
+    expect(agent.state).toBe('CHASE');
+    expect(agent.path.at(-1)).not.toEqual({ i: 13, j: 10 });
+    expect(agent.path.at(-1)).toEqual(expect.objectContaining({
+      i: expect.any(Number), j: expect.any(Number),
+    }));
+    expect(Math.abs(agent.path.at(-1)!.i - 13) + Math.abs(agent.path.at(-1)!.j - 10)).toBe(1);
   });
 
   it('avoids dynamically occupied tiles and replans around a blocked next step', () => {
