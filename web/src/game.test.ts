@@ -20,6 +20,7 @@ describe('RPGQG core', () => {
     expect(fused.cards[0].rarity).toBe('Rare');
     expect(fused.fusionMaterials).toBe(0);
     expect(fused.equippedCardId).toBe(fused.cards[0].id);
+    expect(fused.equipmentSlots?.weapon).toBe(fused.cards[0].id);
   });
 
   it('blocks underfunded fusion and rejects duplicate ids', () => {
@@ -35,6 +36,7 @@ describe('RPGQG core', () => {
     const equipped = cards.reduce((state, card) => equipCardToSlot(state, card.id, card.slot ?? 'weapon'), { ...base, cards });
     expect(getEquipmentLoadout(equipped)).toMatchObject({ weapon: a, head: cards[2], accessory: cards[3] });
     expect(equipCardToSlot(equipped, null, 'head').equipmentSlots?.head).toBeNull();
+    expect(equipCardToSlot(equipped, null, 'weapon').equippedCardId).toBeNull();
   });
   it('assigns deterministic equipment slots to newly generated rewards', () => {
     expect(grantArenaReward(base).cards[0].slot).toBe('weapon');
