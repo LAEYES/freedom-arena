@@ -22,6 +22,15 @@ describe('terrain-aware NPC formation planning', () => {
     }
   });
 
+  it('starts each member route from its own current tile', () => {
+    const start = { i: 10, j: 10 };
+    const plans = planNpcFormation(map, { i: 16, j: 16 }, { i: 1, j: 0 },
+      [{ id: 'member', role: 'SCOUT', position: start }]);
+    expect(plans).toHaveLength(1);
+    expect(plans[0].path[0]).toMatchObject(start);
+    expect(plans[0].path[plans[0].path.length - 1]).toMatchObject(plans[0].slot);
+  });
+
   it('does not allocate occupied slots', () => {
     const occupied = new Set(['14:14', '14:18']);
     const plans = planNpcFormation(map, { i: 16, j: 16 }, { i: 1, j: 0 },
