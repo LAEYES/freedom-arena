@@ -6,7 +6,7 @@ describe('Freedom Arena graphics asset factory', () => {
     const a = createAsset('ground','temperate',42,64);
     const b = createAsset('ground','temperate',42,64);
     expect(a).toEqual(b);
-    expect(a.id).toBe('fa:temperate:ground:42');
+    expect(a.id).toBe('fa:temperate:ground:42:64');
     expect(a.version).toBe(1);
   });
 
