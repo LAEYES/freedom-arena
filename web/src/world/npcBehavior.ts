@@ -69,32 +69,40 @@ export function updateNpcBehavior(
   let target: TileCoordinate | null = state === 'RETURN' ? agent.home : null;
   let candidatePath: TileCoordinate[] | null = null;
   let targetKey: string | null = target ? key(target) : null;
+  const nextPathTile = agent.path[agent.pathIndex + 1];
+  const pathBlocked = !!nextPathTile && isTileBlocked(map, nextPathTile.i, nextPathTile.j, blockedTiles);
 
   if (state === 'CHASE') {
     // Keep the player's tile occupied: NPCs pursue an adjacent interaction tile,
-    // never the player's exact cell.
+    // never the player's exact cell. Reuse the current route until its target moves
+    // or the next step becomes occupied, avoiding repeated A* searches per frame.
     blockedTiles.add(key(player));
-    const adjacentTargets = [
-      { i: player.i - 1, j: player.j },
-      { i: player.i + 1, j: player.j },
-      { i: player.i, j: player.j - 1 },
-      { i: player.i, j: player.j + 1 },
-    ];
-    for (const candidate of adjacentTargets) {
-      if (isTileBlocked(map, candidate.i, candidate.j, blockedTiles)) continue;
-      const path = findTerrainPath(map, agent.position, candidate, {
-        allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
-      });
-      if (path.length && (!candidatePath || path.length < candidatePath.length)) {
-        target = candidate;
-        candidatePath = path;
+    const playerKey = key(player);
+    const currentTargetMatches = agent.state === 'CHASE'
+      && agent.targetKey?.startsWith(playerKey + '>') === true;
+    if (currentTargetMatches && !pathBlocked) {
+      targetKey = agent.targetKey;
+    } else {
+      const adjacentTargets = [
+        { i: player.i - 1, j: player.j },
+        { i: player.i + 1, j: player.j },
+        { i: player.i, j: player.j - 1 },
+        { i: player.i, j: player.j + 1 },
+      ];
+      for (const candidate of adjacentTargets) {
+        if (isTileBlocked(map, candidate.i, candidate.j, blockedTiles)) continue;
+        const path = findTerrainPath(map, agent.position, candidate, {
+          allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
+        });
+        if (path.length && (!candidatePath || path.length < candidatePath.length)) {
+          target = candidate;
+          candidatePath = path;
+        }
       }
+      targetKey = playerKey + '>' + (target ? key(target) : 'unreachable');
     }
-    targetKey = key(player) + '>' + (target ? key(target) : 'unreachable');
   }
 
-  const nextPathTile = agent.path[agent.pathIndex + 1];
-  const pathBlocked = !!nextPathTile && isTileBlocked(map, nextPathTile.i, nextPathTile.j, blockedTiles);
   const needsPath = targetKey !== agent.targetKey || state !== agent.state || pathBlocked;
   let path = agent.path;
   let pathIndex = agent.pathIndex;
