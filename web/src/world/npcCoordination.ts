@@ -2,6 +2,7 @@ import type { TileCoordinate } from './coordinates';
 import { hasTerrainLineOfSight } from './npcPerception';
 import { tileKey } from './navigation';
 import type { TerrainMap } from './terrain';
+import type { NpcBehaviorAgent } from './npcBehavior';
 
 export type NpcAlertSource = {
   id: string;
@@ -43,16 +44,10 @@ export function resolveNpcAlertRecipients(
 }
 
 /** Promote a passive local agent to ALERT after receiving a valid group signal. */
-export function receiveNpcAlertSignal<T extends {
-  id: string;
-  position: TileCoordinate;
-  facing: { i: number; j: number };
-  state: string;
-  path: TileCoordinate[];
-  pathIndex: number;
-  targetKey: string | null;
-  stateElapsedMs: number;
-}>(agent: T, source: TileCoordinate): T {
+export function receiveNpcAlertSignal(
+  agent: NpcBehaviorAgent,
+  source: TileCoordinate,
+): NpcBehaviorAgent {
   if (agent.state !== 'PATROL' && agent.state !== 'IDLE') return agent;
   const di = source.i - agent.position.i;
   const dj = source.j - agent.position.j;
