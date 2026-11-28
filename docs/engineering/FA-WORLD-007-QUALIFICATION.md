@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendances : FA-WORLD-001 à FA-WORLD-006
-- Statut : tests d'intégration ajoutés ; CI en attente.
+- Statut : PREVALIDATED — tests et build CI réussis.
 
 ## Objectif
 
@@ -45,4 +45,17 @@ Le lot peut être prévalidé comme noyau logique spatial lorsque :
 - le build TypeScript/Vite passe,
 - aucun changement de schéma ou de déploiement n'est requis.
 
-La qualification graphique et l'intégration gameplay seront des lots ultérieurs.
+## Résultats de qualification
+
+- GitHub Actions — Web build, run #172 : **success**.
+- Vitest : **69/69 tests réussis**, 10 fichiers de test.
+- TypeScript : **success**.
+- Vite production build : **success**, 69 modules transformés.
+- Hostinger Deploy, run #98 : build réussi ; étape `Upload dist to Hostinger` **skipped** car pull request.
+- Aucun merge, aucune migration de sauvegarde et aucun déploiement Hostinger.
+
+## Décision de prévalidation
+
+**FA-WORLD-007 : PREVALIDATED.** Le noyau logique spatial composé des coordonnées, caméra mathématique, génération de terrain, navigation A* et chunk manager passe les tests unitaires et transversaux.
+
+La qualification graphique et l'intégration gameplay restent des jalons séparés : aucun rendu WebGL visible n'est encore branché à l'interface, et le moteur spatial n'a pas encore remplacé les fonctions historiques du jeu.
