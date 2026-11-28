@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
 import { ChunkManager, ChunkStreamScheduler, isChunkVisibleInCamera } from './chunks';
-import { FrameTimeMonitor } from './worldPerformance';
+import { AdaptiveRenderScale, FrameTimeMonitor } from './worldPerformance';
 import { resolveWorldLighting } from './worldLighting';
 import { selectWorldLod } from './worldLod';
 import { findTerrainPath, tileKey } from './navigation';
@@ -257,6 +257,11 @@ export function World3DCanvas({
     cycle: 'day',
     fps: 0,
     frameMs: 0,
+    frameP95Ms: 0,
+    cpuMs: 0,
+    gpuMs: 0,
+    gpuSupported: false,
+    renderScale: 1,
     status: 'Initialisation WebGL2',
   });
 
@@ -466,6 +471,16 @@ export function World3DCanvas({
     let vegetationChunkOpacityLocation: WebGLUniformLocation | null = null;
     let disposed = false;
     const frameTimeMonitor = new FrameTimeMonitor(120);
+    const cpuFrameMonitor = new FrameTimeMonitor(120);
+    const gpuFrameMonitor = new FrameTimeMonitor(90);
+    const adaptiveRenderScale = new AdaptiveRenderScale();
+    const renderScaleRef = { current: 1 };
+    const gpuTimerExtension = gl?.getExtension('EXT_disjoint_timer_query_webgl2') as {
+      TIME_ELAPSED_EXT: number;
+      GPU_DISJOINT_EXT: number;
+    } | null;
+    const pendingGpuQueries: WebGLQuery[] = [];
+    let activeGpuQuery: WebGLQuery | null = null;
     let lastPerformanceUpdate = 0;
 
     try {
@@ -544,7 +559,8 @@ export function World3DCanvas({
         pois: zone.pointsOfInterest.length,
         weather: environment.weather,
         cycle: environment.cycle,
-        status: 'WebGL2 actif · entités 3D chargées',
+        gpuSupported: Boolean(gpuTimerExtension),
+        status: 'WebGL2 actif · profilage CPU/GPU',
       }));
       setRendererError(null);
 
@@ -557,22 +573,37 @@ export function World3DCanvas({
 
       const draw = (time: number) => {
         if (disposed || !gl || !program || !avatarBuffer) return;
+        const cpuFrameStart = performance.now();
         const delta = previousTime ? Math.min(50, time - previousTime) : 16.67;
         previousTime = time;
         if (delta > 0) frameTimeMonitor.add(delta);
-        if (time - lastPerformanceUpdate >= 1000) {
-          const performance = frameTimeMonitor.summary();
-          setHud(current => current.fps === Math.round(performance.fps) && Math.abs(current.frameMs - performance.meanMs) < 0.05
-            ? current
-            : { ...current, fps: Math.round(performance.fps), frameMs: performance.meanMs });
-          lastPerformanceUpdate = time;
+        if (gpuTimerExtension) {
+          const disjoint = Boolean(gl.getParameter(gpuTimerExtension.GPU_DISJOINT_EXT));
+          if (disjoint) {
+            for (const query of pendingGpuQueries) gl.deleteQuery(query);
+            pendingGpuQueries.length = 0;
+            gpuFrameMonitor.reset();
+          } else {
+            const stillPending: WebGLQuery[] = [];
+            for (const query of pendingGpuQueries) {
+              if (gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) {
+                const elapsedNs = gl.getQueryParameter(query, gl.QUERY_RESULT) as number;
+                const elapsedMs = elapsedNs / 1_000_000;
+                if (Number.isFinite(elapsedMs) && elapsedMs > 0) gpuFrameMonitor.add(elapsedMs);
+                gl.deleteQuery(query);
+              } else {
+                stillPending.push(query);
+              }
+            }
+            pendingGpuQueries.splice(0, pendingGpuQueries.length, ...stillPending);
+          }
         }
         const rect = canvas.getBoundingClientRect();
         if (rect.width < 2 || rect.height < 2) {
           frameId = window.requestAnimationFrame(draw);
           return;
         }
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+        const dpr = Math.min((window.devicePixelRatio || 1) * renderScaleRef.current, 1.75);
         const width = Math.max(1, Math.floor(rect.width * dpr));
         const height = Math.max(1, Math.floor(rect.height * dpr));
         if (canvas.width !== width || canvas.height !== height) {
@@ -608,6 +639,10 @@ export function World3DCanvas({
 
         gl.viewport(0, 0, width, height);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        if (gpuTimerExtension && pendingGpuQueries.length < 3) {
+          activeGpuQuery = gl.createQuery();
+          if (activeGpuQuery) gl.beginQuery(gpuTimerExtension.TIME_ELAPSED_EXT, activeGpuQuery);
+        }
         gl.useProgram(program);
         gl.uniformMatrix4fv(matrixLocation, false, new Float32Array(camera.viewProjectionMatrix));
         const lighting = resolveWorldLighting(environment.cycle, environment.weather);
@@ -1108,6 +1143,32 @@ export function World3DCanvas({
           }
         }
 
+        if (activeGpuQuery && gpuTimerExtension) {
+          gl.endQuery(gpuTimerExtension.TIME_ELAPSED_EXT);
+          pendingGpuQueries.push(activeGpuQuery);
+          activeGpuQuery = null;
+        }
+        const cpuElapsedMs = Math.max(0.001, performance.now() - cpuFrameStart);
+        cpuFrameMonitor.add(cpuElapsedMs);
+        const gpuSummary = gpuFrameMonitor.summary();
+        if (gpuTimerExtension && gpuSummary.samples >= 8) {
+          renderScaleRef.current = adaptiveRenderScale.update(gpuSummary.p95Ms, delta);
+        }
+        if (time - lastPerformanceUpdate >= 1000) {
+          const frameSummary = frameTimeMonitor.summary();
+          const cpuSummary = cpuFrameMonitor.summary();
+          setHud(current => ({
+            ...current,
+            fps: Math.round(frameSummary.fps),
+            frameMs: frameSummary.meanMs,
+            frameP95Ms: frameSummary.p95Ms,
+            cpuMs: cpuSummary.meanMs,
+            gpuMs: gpuSummary.samples ? gpuSummary.meanMs : 0,
+            gpuSupported: Boolean(gpuTimerExtension),
+            renderScale: renderScaleRef.current,
+          }));
+          lastPerformanceUpdate = time;
+        }
         frameId = window.requestAnimationFrame(draw);
       };
 
@@ -1221,6 +1282,8 @@ export function World3DCanvas({
       disposed = true;
       window.cancelAnimationFrame(frameId);
       if (gl) {
+        if (activeGpuQuery) gl.deleteQuery(activeGpuQuery);
+        for (const query of pendingGpuQueries) gl.deleteQuery(query);
         for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
         terrainChunkBuffers.clear();
         for (const entry of sceneChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
@@ -1264,7 +1327,8 @@ export function World3DCanvas({
         <strong>FA-WORLD · WEBGL2</strong>
         <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks · {hud.pendingChunks} en attente</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
-        <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
+        <span>{hud.fps} FPS · p95 {hud.frameP95Ms.toFixed(1)} ms · CPU {hud.cpuMs.toFixed(1)} ms</span>
+        <span>GPU {hud.gpuSupported ? (hud.gpuMs > 0 ? hud.gpuMs.toFixed(1) + ' ms' : 'mesure…') : 'timer indisponible'} · résolution {Math.round(hud.renderScale * 100)}%</span>
         <div className="world3d-stream-progress" role="progressbar" aria-label="Chargement progressif des chunks" aria-valuemin={0} aria-valuemax={hud.streamTotal} aria-valuenow={hud.streamTotal - hud.pendingChunks}>
           <span style={{ width: (hud.streamTotal > 0 ? ((hud.streamTotal - hud.pendingChunks) / hud.streamTotal) * 100 : 100) + '%' }} />
         </div>
