@@ -339,3 +339,14 @@ Qualification work must distinguish three measurement classes:
 3. Remote D1 load tests (require an explicitly authorized non-production database and a controlled test window; do not infer production capacity from synthetic data).
 
 No remote D1 load test is run automatically by CI. Record runtime, worker version, D1 region, request mix, sample count, p50/p95/p99 latency, throughput, error rate, and contention/retry counts before publishing a capacity claim.
+
+
+### Reproducible local ranking microbenchmark
+
+From `backend/`, run:
+
+```bash
+npm run bench:pvp
+```
+
+This measures in-memory sorting for 100, 500, 1,000 and 5,000 synthetic players over 40 iterations and reports p50/p95/p99 plus throughput. It is a CPU microbenchmark only: it does not measure Worker request overhead, network latency, D1 query latency, locking, or production capacity.
