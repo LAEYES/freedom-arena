@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
-import { ChunkManager } from './chunks';
+import { ChunkManager, isChunkVisibleInCamera } from './chunks';
 import { findTerrainPath, tileKey } from './navigation';
 import { advanceNpcAgents, createNpcAgents, getNpcAgentPose, type NpcAgent } from './npcSimulation';
 import { createNpcBehaviorAgent, getNpcBehaviorPose, updateNpcBehavior, type NpcBehaviorAgent } from './npcBehavior';
@@ -255,14 +255,13 @@ export function World3DCanvas({
     if (!canvas) return;
     let gl: WebGL2RenderingContext | null = null;
     let program: WebGLProgram | null = null;
-    let terrainBuffer: WebGLBuffer | null = null;
+    const terrainChunkBuffers = new Map<string, { buffer: WebGLBuffer; vertexCount: number }>();
     let avatarBuffer: WebGLBuffer | null = null;
     let sceneBuffer: WebGLBuffer | null = null;
     let npcBuffer: WebGLBuffer | null = null;
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
-    let terrainVertexCount = 0;
     let positionLocation = -1;
     let colorLocation = -1;
     let matrixLocation: WebGLUniformLocation | null = null;
@@ -295,14 +294,11 @@ export function World3DCanvas({
 
       const initialChunks = chunkManager.loadAround(positionRef.current, 4);
       const terrainTiles = initialChunks.flatMap(chunk => chunk.tiles);
-      const terrainVertices = buildTerrainMesh(terrainTiles);
-      terrainVertexCount = terrainVertices.length / 6;
-      terrainBuffer = gl.createBuffer();
       avatarBuffer = gl.createBuffer();
       sceneBuffer = gl.createBuffer();
       npcBuffer = gl.createBuffer();
       weatherBuffer = gl.createBuffer();
-      if (!terrainBuffer || !avatarBuffer || !sceneBuffer || !npcBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
+      if (!avatarBuffer || !sceneBuffer || !npcBuffer || !weatherBuffer) throw new Error('Impossible de créer les buffers GPU.');
       gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, sceneVertices, gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, npcBuffer);
@@ -310,8 +306,6 @@ export function World3DCanvas({
       gl.bindBuffer(gl.ARRAY_BUFFER, weatherBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, weatherVertices, gl.STATIC_DRAW);
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, terrainVertices, gl.STATIC_DRAW);
       gl.enable(gl.DEPTH_TEST);
       gl.depthFunc(gl.LEQUAL);
       gl.disable(gl.CULL_FACE);
@@ -337,7 +331,7 @@ export function World3DCanvas({
       };
 
       const draw = (time: number) => {
-        if (disposed || !gl || !program || !terrainBuffer || !avatarBuffer) return;
+        if (disposed || !gl || !program || !avatarBuffer) return;
         const delta = previousTime ? Math.min(50, time - previousTime) : 16.67;
         previousTime = time;
         const rect = canvas.getBoundingClientRect();
@@ -395,9 +389,44 @@ export function World3DCanvas({
         gl.uniform1f(timeLocation, time * 0.001);
         gl.uniform1f(weatherMotionLocation, 0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, terrainBuffer);
-        bindVertexLayout();
-        gl.drawArrays(gl.TRIANGLES, 0, terrainVertexCount);
+        const chunkCenter = activeCameraMode === 'thirdPerson'
+          ? positionRef.current
+          : { i: 32, j: 32 };
+        const candidateChunks = chunkManager.loadAround(chunkCenter, activeCameraMode === 'thirdPerson' ? 1 : 4);
+        const visibleChunks = candidateChunks.filter(chunk => isChunkVisibleInCamera(chunk, camera));
+        const visibleChunkKeys = new Set(visibleChunks.map(chunk => chunk.key));
+        for (const chunk of visibleChunks) {
+          let cached = terrainChunkBuffers.get(chunk.key);
+          if (!cached) {
+            const buffer = gl.createBuffer();
+            if (!buffer) throw new Error('Impossible de créer le buffer GPU du chunk ' + chunk.key);
+            const vertices = buildTerrainMesh(chunk.tiles);
+            cached = { buffer, vertexCount: vertices.length / 6 };
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+          } else {
+            terrainChunkBuffers.delete(chunk.key);
+          }
+          terrainChunkBuffers.set(chunk.key, cached);
+        }
+        while (terrainChunkBuffers.size > 32) {
+          const oldestKey = terrainChunkBuffers.keys().next().value as string | undefined;
+          if (!oldestKey || visibleChunkKeys.has(oldestKey)) break;
+          const oldest = terrainChunkBuffers.get(oldestKey);
+          if (oldest) gl.deleteBuffer(oldest.buffer);
+          terrainChunkBuffers.delete(oldestKey);
+        }
+        for (const chunk of visibleChunks) {
+          const cached = terrainChunkBuffers.get(chunk.key);
+          if (!cached) continue;
+          gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
+          bindVertexLayout();
+          gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
+        }
+        const visibleTileCount = visibleChunks.reduce((sum, chunk) => sum + chunk.tiles.length, 0);
+        setHud(current => current.chunks === visibleChunks.length && current.tileCount === visibleTileCount
+          ? current
+          : { ...current, chunks: visibleChunks.length, tileCount: visibleTileCount });
 
         gl.bindBuffer(gl.ARRAY_BUFFER, sceneBuffer);
         bindVertexLayout();
@@ -806,7 +835,8 @@ export function World3DCanvas({
         canvas.removeEventListener('pointerdown', onPointerDown);
         canvas.removeEventListener('keydown', onKeyDown);
         if (gl) {
-          if (terrainBuffer) gl.deleteBuffer(terrainBuffer);
+          for (const entry of terrainChunkBuffers.values()) gl.deleteBuffer(entry.buffer);
+      terrainChunkBuffers.clear();
           if (avatarBuffer) gl.deleteBuffer(avatarBuffer);
           if (sceneBuffer) gl.deleteBuffer(sceneBuffer);
           if (npcBuffer) gl.deleteBuffer(npcBuffer);
