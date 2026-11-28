@@ -115,5 +115,7 @@ FA-WORLD-031: chunk-local decoration meshes, shared-template instanced vegetatio
 FA-WORLD-032: validated one-cell cardinal bridge links integrated with A* and the 3D movement adapter; deterministic five-role settlement districts, chunk-local building meshes and typed building interactions. Multi-cell bridges and building collision footprints remain deferred.
 FA-WORLD-033: D1 world presence, revisioned zone snapshots, movement CAS/event log and serialized browser sync; terrain/bridge authority, authentication and rate limiting remain pending.
 FA-WORLD-034: authenticated server authority, terrain/bridge validation, zone-state schemas, rate limiting and remote snapshot reconciliation.
+FA-WORLD-035: prioritized progressive chunk loading, bounded per-frame preparation, LRU retention, fog-to-world transitions synchronized across terrain, props and instanced vegetation; current sector remains finite 64×64 and remote persistence is deferred.
+FA-WORLD-036: biome-aware dynamic lighting, material response and environmental post-processing under measured GPU budgets.
 
 No merge or deployment is authorized by completion of these tasks.
