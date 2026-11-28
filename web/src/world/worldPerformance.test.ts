@@ -43,3 +43,33 @@ describe('bounded frame-time telemetry', () => {
     }
   });
 });
+
+
+describe('adaptive render scale', () => {
+  it('reduces resolution only after sustained GPU overload', () => {
+    const scale = new AdaptiveRenderScale();
+    expect(scale.update(22, 900)).toBe(1);
+    expect(scale.update(22, 950)).toBe(0.9);
+  });
+
+  it('recovers gradually after sustained GPU headroom', () => {
+    const scale = new AdaptiveRenderScale({ initial: 0.85 });
+    expect(scale.update(8, 4000)).toBe(0.85);
+    expect(scale.update(8, 3000)).toBe(0.9);
+  });
+
+  it('does not oscillate inside the hysteresis band', () => {
+    const scale = new AdaptiveRenderScale();
+    scale.update(20, 900);
+    expect(scale.update(15, 5000)).toBe(1);
+    expect(scale.update(20, 900)).toBe(1);
+  });
+
+  it('clamps at configured bounds and rejects invalid samples', () => {
+    const scale = new AdaptiveRenderScale({ initial: 0.7, minimum: 0.7, maximum: 0.8 });
+    expect(scale.update(30, 5000)).toBe(0.7);
+    expect(scale.update(5, 30000)).toBe(0.75);
+    expect(() => scale.update(Number.NaN, 16)).toThrow(RangeError);
+    expect(() => new AdaptiveRenderScale({ minimum: 2, maximum: 1 })).toThrow(RangeError);
+  });
+});
