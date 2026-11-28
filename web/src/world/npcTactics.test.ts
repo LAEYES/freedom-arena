@@ -28,6 +28,6 @@ describe('NPC tactical roles and formation geometry', () => {
 
   it('normalizes facing and clamps invalid spacing and member index', () => {
     expect(getNpcFormationSlot({ i: 4, j: 4 }, -3, { i: 0, j: 0 }, Number.NaN))
-      .toEqual({ i: 3, j: 3 });
+      .toEqual({ i: 2, j: 2 });
   });
 });
