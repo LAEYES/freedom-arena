@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createIsometricCamera, type IsometricCamera } from './isometricCamera';
-import { ChunkManager, isChunkVisibleInCamera } from './chunks';
+import { ChunkManager, ChunkStreamScheduler, isChunkVisibleInCamera } from './chunks';
 import { FrameTimeMonitor } from './worldPerformance';
 import { selectWorldLod } from './worldLod';
 import { findTerrainPath, tileKey } from './navigation';
@@ -112,11 +112,13 @@ function createProgram(gl: WebGL2RenderingContext): WebGLProgram {
     uniform vec3 uTint;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
+    uniform float uChunkOpacity;
     out vec4 outColor;
     void main() {
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
       vec3 litColor = vColor * uTint;
-      outColor = vec4(mix(litColor, uFogColor, depthFog), 1.0);
+      vec3 transitioned = mix(uFogColor, litColor, uChunkOpacity);
+      outColor = vec4(mix(transitioned, uFogColor, depthFog), 1.0);
     }
   `;
   const vertex = createShader(gl, gl.VERTEX_SHADER, vertexSource);
@@ -157,10 +159,12 @@ function createVegetationProgram(gl: WebGL2RenderingContext): WebGLProgram {
     in vec3 vColor;
     uniform vec3 uFogColor;
     uniform float uFogAmount;
+    uniform float uChunkOpacity;
     out vec4 outColor;
     void main() {
       float depthFog = smoothstep(0.20, 0.98, gl_FragCoord.z) * uFogAmount;
-      outColor = vec4(mix(vColor, uFogColor, depthFog), 1.0);
+      vec3 transitioned = mix(uFogColor, vColor, uChunkOpacity);
+      outColor = vec4(mix(transitioned, uFogColor, depthFog), 1.0);
     }
   `);
   const program = gl.createProgram();
@@ -216,6 +220,7 @@ export function World3DCanvas({
     x: worldTile.x,
     y: worldTile.y,
     chunks: 0,
+    pendingChunks: 0,
     tileCount: 0,
     actors: 0,
     pois: 0,
@@ -238,6 +243,10 @@ export function World3DCanvas({
     chunkSize: 16,
     maxCachedChunks: 32,
   }), [terrainMap]);
+  const chunkStreamer = useMemo(() => new ChunkStreamScheduler(chunkManager, terrainMap, {
+    chunkSize: 16,
+    transitionDurationMs: 220,
+  }), [chunkManager, terrainMap]);
 
   const zone = getZone(zoneId);
   const environment = getZoneEnvironment(zone, worldThreat, worldResources, explorationCount);
@@ -395,6 +404,7 @@ export function World3DCanvas({
     let vegetationInstanceBuffer: WebGLBuffer | null = null;
     let vegetationVertexCount = 0;
     let vegetationInstanceCount = 0;
+    let vegetationDrawRanges: Array<{ key: string; offset: number; count: number }> = [];
     let vegetationBufferSignature = '';
     let vegetationMatrixLocation: WebGLUniformLocation | null = null;
     let vegetationFogColorLocation: WebGLUniformLocation | null = null;
@@ -415,6 +425,8 @@ export function World3DCanvas({
     let fogAmountLocation: WebGLUniformLocation | null = null;
     let timeLocation: WebGLUniformLocation | null = null;
     let weatherMotionLocation: WebGLUniformLocation | null = null;
+    let chunkOpacityLocation: WebGLUniformLocation | null = null;
+    let vegetationChunkOpacityLocation: WebGLUniformLocation | null = null;
     let disposed = false;
     const frameTimeMonitor = new FrameTimeMonitor(120);
     let lastPerformanceUpdate = 0;
@@ -436,11 +448,14 @@ export function World3DCanvas({
       fogAmountLocation = gl.getUniformLocation(program, 'uFogAmount');
       timeLocation = gl.getUniformLocation(program, 'uTime');
       weatherMotionLocation = gl.getUniformLocation(program, 'uWeatherMotion');
-      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation || !timeLocation || !weatherMotionLocation) {
+      chunkOpacityLocation = gl.getUniformLocation(program, 'uChunkOpacity');
+      if (positionLocation < 0 || colorLocation < 0 || !matrixLocation || !tintLocation || !fogColorLocation || !fogAmountLocation || !timeLocation || !weatherMotionLocation || !chunkOpacityLocation) {
         throw new Error('Attributs ou uniformes WebGL2 introuvables.');
       }
 
-      const initialChunks = chunkManager.loadAround(positionRef.current, 4);
+      chunkStreamer.requestAround(positionRef.current, 4);
+      const initialStream = chunkStreamer.tick(16.67, 4);
+      const initialChunks = initialStream.chunks;
       const terrainTiles = initialChunks.flatMap(chunk => chunk.tiles);
       avatarBuffer = gl.createBuffer();
       sceneBuffer = gl.createBuffer();
@@ -464,7 +479,8 @@ export function World3DCanvas({
       vegetationMatrixLocation = gl.getUniformLocation(vegetationProgram, 'uViewProjection');
       vegetationFogColorLocation = gl.getUniformLocation(vegetationProgram, 'uFogColor');
       vegetationFogAmountLocation = gl.getUniformLocation(vegetationProgram, 'uFogAmount');
-      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation) {
+      vegetationChunkOpacityLocation = gl.getUniformLocation(vegetationProgram, 'uChunkOpacity');
+      if (!vegetationMatrixLocation || !vegetationFogColorLocation || !vegetationFogAmountLocation || !vegetationChunkOpacityLocation) {
         throw new Error('Uniformes du programme de végétation instanciée introuvables.');
       }
 
@@ -476,6 +492,7 @@ export function World3DCanvas({
       setHud(current => ({
         ...current,
         chunks: initialChunks.length,
+        pendingChunks: initialStream.pending,
         tileCount: terrainTiles.length,
         actors: sceneNpcs.length,
         pois: zone.pointsOfInterest.length,
@@ -558,11 +575,14 @@ export function World3DCanvas({
         gl.uniform1f(fogAmountLocation, environment.weather === 'clear' ? 0.04 : environment.weather === 'storm' ? 0.34 : 0.20);
         gl.uniform1f(timeLocation, time * 0.001);
         gl.uniform1f(weatherMotionLocation, 0);
+        gl.uniform1f(chunkOpacityLocation, 1);
 
         const chunkCenter = activeCameraMode === 'thirdPerson'
           ? positionRef.current
           : { i: 32, j: 32 };
-        const candidateChunks = chunkManager.loadAround(chunkCenter, activeCameraMode === 'thirdPerson' ? 1 : 4);
+        chunkStreamer.requestAround(chunkCenter, activeCameraMode === 'thirdPerson' ? 1 : 4);
+        const streamFrame = chunkStreamer.tick(delta, 2);
+        const candidateChunks = streamFrame.chunks;
         const visibleChunks = candidateChunks.filter(chunk => isChunkVisibleInCamera(chunk, camera));
         const visibleChunkKeys = new Set(visibleChunks.map(chunk => chunk.key));
         for (const chunk of visibleChunks) {
@@ -591,12 +611,15 @@ export function World3DCanvas({
           if (!cached) continue;
           gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
           bindVertexLayout();
+          gl.uniform1f(chunkOpacityLocation, chunkStreamer.getOpacity(chunk.key));
           gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
         }
+        gl.uniform1f(chunkOpacityLocation, 1);
         const visibleTileCount = visibleChunks.reduce((sum, chunk) => sum + chunk.tiles.length, 0);
-        setHud(current => current.chunks === visibleChunks.length && current.tileCount === visibleTileCount
+        setHud(current => current.chunks === visibleChunks.length
+          && current.pendingChunks === streamFrame.pending && current.tileCount === visibleTileCount
           ? current
-          : { ...current, chunks: visibleChunks.length, tileCount: visibleTileCount });
+          : { ...current, chunks: visibleChunks.length, pendingChunks: streamFrame.pending, tileCount: visibleTileCount });
 
         const sceneLodKeys = new Set<string>();
         for (const chunk of visibleChunks) {
@@ -629,8 +652,11 @@ export function World3DCanvas({
           if (!cached) continue;
           gl.bindBuffer(gl.ARRAY_BUFFER, cached.buffer);
           bindVertexLayout();
+          const chunkKeyForFade = cacheKey.split(':').slice(0, 2).join(':');
+          gl.uniform1f(chunkOpacityLocation, chunkStreamer.getOpacity(chunkKeyForFade));
           gl.drawArrays(gl.TRIANGLES, 0, cached.vertexCount);
         }
+        gl.uniform1f(chunkOpacityLocation, 1);
         while (sceneChunkBuffers.size > 32) {
           const oldestKey = sceneChunkBuffers.keys().next().value as string | undefined;
           if (!oldestKey || sceneLodKeys.has(oldestKey)) break;
@@ -645,6 +671,8 @@ export function World3DCanvas({
 
         const vegetationParts: Float32Array[] = [];
         const vegetationKeys: string[] = [];
+        const nextVegetationRanges: Array<{ key: string; offset: number; count: number }> = [];
+        let nextVegetationOffset = 0;
         for (const chunk of visibleChunks) {
           const reference = activeCameraMode === 'thirdPerson'
             ? positionRef.current
@@ -658,6 +686,9 @@ export function World3DCanvas({
           if (instances?.length) {
             vegetationParts.push(instances);
             vegetationKeys.push(chunk.key + ':' + lod);
+            const count = instances.length / 7;
+            nextVegetationRanges.push({ key: chunk.key, offset: nextVegetationOffset, count });
+            nextVegetationOffset += count;
           }
         }
         const nextVegetationSignature = vegetationKeys.join('|');
@@ -672,6 +703,7 @@ export function World3DCanvas({
           gl.bindBuffer(gl.ARRAY_BUFFER, vegetationInstanceBuffer);
           gl.bufferData(gl.ARRAY_BUFFER, combined, gl.DYNAMIC_DRAW);
           vegetationInstanceCount = combined.length / 7;
+          vegetationDrawRanges = nextVegetationRanges;
           vegetationBufferSignature = nextVegetationSignature;
         }
         if (vegetationInstanceCount > 0 && vegetationProgram && vegetationTemplateBuffer && vegetationInstanceBuffer) {
@@ -688,15 +720,20 @@ export function World3DCanvas({
           gl.vertexAttribDivisor(1, 0);
           gl.bindBuffer(gl.ARRAY_BUFFER, vegetationInstanceBuffer);
           gl.enableVertexAttribArray(2);
-          gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 28, 0);
           gl.vertexAttribDivisor(2, 1);
           gl.enableVertexAttribArray(3);
-          gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 28, 12);
           gl.vertexAttribDivisor(3, 1);
           gl.enableVertexAttribArray(4);
-          gl.vertexAttribPointer(4, 3, gl.FLOAT, false, 28, 16);
           gl.vertexAttribDivisor(4, 1);
-          gl.drawArraysInstanced(gl.TRIANGLES, 0, vegetationVertexCount, vegetationInstanceCount);
+          for (const range of vegetationDrawRanges) {
+            const byteOffset = range.offset * 28;
+            gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 28, byteOffset);
+            gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 28, byteOffset + 12);
+            gl.vertexAttribPointer(4, 3, gl.FLOAT, false, 28, byteOffset + 16);
+            gl.uniform1f(vegetationChunkOpacityLocation, chunkStreamer.getOpacity(range.key));
+            gl.drawArraysInstanced(gl.TRIANGLES, 0, vegetationVertexCount, range.count);
+          }
+          gl.uniform1f(vegetationChunkOpacityLocation, 1);
           for (const attribute of [2, 3, 4]) {
             gl.vertexAttribDivisor(attribute, 0);
             gl.disableVertexAttribArray(attribute);
@@ -1010,7 +1047,7 @@ export function World3DCanvas({
             }
             positionRef.current = { i: next.i, j: next.j };
             active.index += 1;
-            chunkManager.loadAround(positionRef.current, 3);
+            chunkStreamer.requestAround(positionRef.current, 3);
             setHud(current => ({
               ...current,
               x: next.i,
@@ -1175,7 +1212,7 @@ export function World3DCanvas({
       </div>
       <div className="world3d-hud">
         <strong>FA-WORLD · WEBGL2</strong>
-        <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks</span>
+        <span>Joueur {hud.x}, {hud.y} · {hud.tileCount.toLocaleString('fr-FR')} cellules · {hud.chunks} chunks · {hud.pendingChunks} en attente</span>
         <span>{hud.actors} PNJ · {hud.pois} POI · {hud.weather} · {hud.cycle}</span>
         <span>{hud.fps} FPS · {hud.frameMs.toFixed(1)} ms moyen</span>
         <span>{hud.status}</span>
