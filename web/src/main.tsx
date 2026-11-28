@@ -101,8 +101,8 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttackA
       const clickY = event.clientY - rect.top;
       const cols = Math.ceil(rect.width / tile);
       const rows = Math.ceil(rect.height / tile);
-      const cameraX = Math.max(0, Math.min(59 - cols, position.current.x - Math.floor(cols / 2)));
-      const cameraY = Math.max(0, Math.min(39 - rows, position.current.y - Math.floor(rows / 2)));
+      const cameraX = Math.max(0, Math.min(59 - cols, Math.floor(playerVisual.current.initialized ? playerVisual.current.x : position.current.x) - Math.floor(cols / 2)));
+      const cameraY = Math.max(0, Math.min(39 - rows, Math.floor(playerVisual.current.initialized ? playerVisual.current.y : position.current.y) - Math.floor(rows / 2)));
       const zone = getZone(zoneId);
       const npcs = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
       const eventPoint = getWorldEventPoint(worldEvent);
@@ -168,8 +168,8 @@ function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttackA
       localVisual.x += (position.current.x - localVisual.x) * smoothing;
       localVisual.y += (position.current.y - localVisual.y) * smoothing;
       if (Math.abs(position.current.x - localVisual.x) > 0.035) playerFacing.current = position.current.x > localVisual.x ? 1 : -1;
-      const cameraX = Math.max(0, Math.min(59 - cols, localVisual.x - Math.floor(cols / 2)));
-      const cameraY = Math.max(0, Math.min(39 - rows, localVisual.y - Math.floor(rows / 2)));
+      const cameraX = Math.max(0, Math.min(59 - cols, Math.floor(localVisual.x) - Math.floor(cols / 2)));
+      const cameraY = Math.max(0, Math.min(39 - rows, Math.floor(localVisual.y) - Math.floor(rows / 2)));
       const terrainKey = [rect.width, rect.height, cameraX, cameraY].join(':');
       if (staticKey !== terrainKey) {
         staticCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
