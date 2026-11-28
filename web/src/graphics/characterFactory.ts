@@ -107,9 +107,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   // Equipment slots are independent visual overlays; all remain cosmetic.
   const gear = options.equipment;
   if (gear?.chest) { rect(gear.chest.accent,-4,-5,2,6); rect(gear.chest.accent,2,-5,2,6); if(gear.chest.tier>=2)rect(gear.chest.accent,-2,-1,4,2); }
-  if (gear?.head) { rect(dark,-5,-13,10,2); rect(gear.head.accent,-5,-14,10,2); if(gear.head.tier>=2){rect(gear.head.accent,-6,-12,2,4);rect(gear.head.accent,4,-12,2,4);} if(gear.head.tier>=3)rect(gear.head.accent,-2,-16,4,2); }
   if (gear?.accessory) { rect(gear.accessory.accent,-7,-1,2,3); if(gear.accessory.tier>=2)rect(gear.accessory.accent,5,-1,2,3); if(gear.accessory.tier>=3){ctx.save();ctx.globalAlpha=.7;ctx.strokeStyle=gear.accessory.accent;ctx.lineWidth=unit;ctx.beginPath();ctx.arc(centerX,centerY,10*unit,Math.PI*.15,Math.PI*.85);ctx.stroke();ctx.restore();} }
-  if (gear?.weapon) { ctx.save();ctx.translate(centerX+6*unit,centerY-7*unit);ctx.rotate(options.pose==='attack'?-0.75+(options.frame%4)*.42:-0.12);ctx.fillStyle=gear.weapon.accent;ctx.fillRect(-unit,-2*unit,2*unit,(10+gear.weapon.tier*2)*unit);if(gear.weapon.tier>=2)ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);ctx.restore(); }
   // Modular armor detail layer: faction trim, belt clasp and chest insignia.
   const layers = getCharacterLayerProfile(options.faction, options.role);
   rect(layers.armorTrim,-4,2,8,1);
@@ -123,6 +121,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   rect(dark,-4,-12,8,3);
   rect(armor,-4,-13,8,2);
   rect(palette.glow,-2,-9,4,1);
+  if (gear?.head) { rect(dark,-5,-13,10,2); rect(gear.head.accent,-5,-14,10,2); if(gear.head.tier>=2){rect(gear.head.accent,-6,-12,2,4);rect(gear.head.accent,4,-12,2,4);} if(gear.head.tier>=3)rect(gear.head.accent,-2,-16,4,2); }
   if(options.role==='scout'){rect(light,-6,-12,2,2);rect(light,4,-12,2,2);}
   if(options.role==='mystic'){rect(palette.glow,-1,-15,2,2);rect(light,-5,-4,2,2);rect(light,3,-4,2,2);}
   // Weapon silhouette and pose-dependent swing.
@@ -136,6 +135,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   if(layers.weapon==='staff'){ctx.fillStyle=palette.light;ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);}
   ctx.fillStyle=dark;ctx.fillRect(-3*unit,2*unit,6*unit,unit);
   ctx.restore();
+  if (gear?.weapon) { ctx.save();ctx.translate(centerX+6*unit,centerY-7*unit);ctx.rotate(options.pose==='attack'?-0.75+(options.frame%4)*.42:-0.12);ctx.fillStyle=gear.weapon.accent;ctx.fillRect(-unit,-2*unit,2*unit,(10+gear.weapon.tier*2)*unit);if(gear.weapon.tier>=2)ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);ctx.restore(); }
   if(options.role==='vanguard'){rect(light,-6,-1,2,4);rect(light,4,-1,2,4);}
   ctx.restore();
 }
