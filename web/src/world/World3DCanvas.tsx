@@ -184,7 +184,7 @@ export function World3DCanvas({
     return buildWeatherParticleMesh(zoneSeed(zoneId) + explorationCount * 7919,
       environment.weather === 'storm' ? 'storm' : environment.weather === 'frost' ? 'frost' : 'mist',
       environment.weather === 'storm' ? 110 : 72);
-  }, [zoneId, explorationCount, environment.weather]);
+  }, [zoneId, explorationCount, environment.weather, environment.cycle]);
 
   useEffect(() => { onTileMoveRef.current = onTileMove; }, [onTileMove]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
