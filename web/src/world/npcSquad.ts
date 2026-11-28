@@ -120,3 +120,12 @@ export function partitionNpcSquads(
   }
   return groups.sort((a, b) => a[0].id.localeCompare(b[0].id));
 }
+
+/** Returns a replacement leader only when the current leader is no longer elected. */
+export function resolveNpcSquadLeaderHandoff(
+  currentLeaderId: string,
+  candidates: readonly NpcSquadCandidate[],
+): NpcSquadCandidate | null {
+  const elected = electNpcSquadLeader(candidates);
+  return elected && elected.id !== currentLeaderId ? elected : null;
+}
