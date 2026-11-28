@@ -109,7 +109,7 @@ async function enforceRateLimit(db: D1Database, subject: string, routeKey: strin
 
 
 async function applyPvpRatingSettlement(db: D1Database, matchId: string): Promise<void> {
-  const match = await db.prepare("SELECT match_id,player_a,player_b,rating_a,rating_b,winner_id,status FROM pvp_matches WHERE match_id=? AND status='completed'").bind(matchId).first<{match_id:string;player_a:string;player_b:string;rating_a:number;rating_b:number;winner_id:string|null;status:string}>();
+  const match = await db.prepare("SELECT match_id,player_a,player_b,rating_a,rating_b,winner_id,status,season_id FROM pvp_matches WHERE match_id=? AND status='completed'").bind(matchId).first<{match_id:string;player_a:string;player_b:string;rating_a:number;rating_b:number;winner_id:string|null;status:string;season_id:string|null}>();
   if (!match) return;
   const scoreA: 0|0.5|1 = match.winner_id === null ? 0.5 : match.winner_id === match.player_a ? 1 : 0;
   const elo = calculateElo(match.rating_a,match.rating_b,scoreA);
@@ -120,6 +120,13 @@ async function applyPvpRatingSettlement(db: D1Database, matchId: string): Promis
     db.prepare("INSERT OR IGNORE INTO pvp_rating_events(match_id,player_id,rating_after,result) SELECT match_id,player_a,after_a,? FROM pvp_rating_log WHERE match_id=?").bind(resultA,matchId),
     db.prepare("INSERT OR IGNORE INTO pvp_rating_events(match_id,player_id,rating_after,result) SELECT match_id,player_b,after_b,? FROM pvp_rating_log WHERE match_id=?").bind(resultB,matchId),
     db.prepare("INSERT INTO pvp_ratings(player_id,rating,matches_played,wins,losses,draws) SELECT player_id,rating_after,1,CASE WHEN result='win' THEN 1 ELSE 0 END,CASE WHEN result='loss' THEN 1 ELSE 0 END,CASE WHEN result='draw' THEN 1 ELSE 0 END FROM pvp_rating_events WHERE match_id=? AND applied_at IS NULL ON CONFLICT(player_id) DO UPDATE SET rating=excluded.rating,matches_played=pvp_ratings.matches_played+1,wins=pvp_ratings.wins+excluded.wins,losses=pvp_ratings.losses+excluded.losses,draws=pvp_ratings.draws+excluded.draws,updated_at=CURRENT_TIMESTAMP").bind(matchId),
+    ...(match.season_id ? [
+      db.prepare("INSERT OR IGNORE INTO pvp_season_events(season_id,match_id,player_id,rating_delta,result) VALUES(?,?,?,?,?)").bind(match.season_id,matchId,match.player_a,elo.ratingA-match.rating_a,resultA),
+      db.prepare("INSERT OR IGNORE INTO pvp_season_events(season_id,match_id,player_id,rating_delta,result) VALUES(?,?,?,?,?)").bind(match.season_id,matchId,match.player_b,elo.ratingB-match.rating_b,resultB),
+      db.prepare("INSERT INTO pvp_season_ratings(season_id,player_id,rating,matches_played,wins,losses,draws) SELECT season_id,player_id,1000+rating_delta,1,CASE WHEN result='win' THEN 1 ELSE 0 END,CASE WHEN result='loss' THEN 1 ELSE 0 END,CASE WHEN result='draw' THEN 1 ELSE 0 END FROM pvp_season_events WHERE match_id=? AND applied_at IS NULL ON CONFLICT(season_id,player_id) DO UPDATE SET rating=MAX(100,MIN(4000,pvp_season_ratings.rating+excluded.rating-1000)),matches_played=pvp_season_ratings.matches_played+1,wins=pvp_season_ratings.wins+excluded.wins,losses=pvp_season_ratings.losses+excluded.losses,draws=pvp_season_ratings.draws+excluded.draws,updated_at=CURRENT_TIMESTAMP").bind(matchId),
+      db.prepare("UPDATE pvp_season_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId)
+    ] : []),
+    db.prepare("UPDATE pvp_season_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId),
     db.prepare("UPDATE pvp_rating_events SET applied_at=CURRENT_TIMESTAMP WHERE match_id=? AND applied_at IS NULL").bind(matchId),
     db.prepare("UPDATE pvp_queue SET rating=(SELECT rating FROM pvp_ratings WHERE player_id=pvp_queue.player_id),status='cancelled',match_id=NULL,updated_at=CURRENT_TIMESTAMP WHERE player_id IN (?,?)").bind(match.player_a,match.player_b),
     db.prepare("DELETE FROM pvp_active_players WHERE match_id=?").bind(matchId)
@@ -201,7 +208,7 @@ export default {
       return json({ error: "rate_limited_or_security_migration_missing" }, 429);
     }
 
-    const pvpRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/pvp\/(queue|status|cancel|rating)$/);
+    const pvpRoute = url.pathname.match(/^\/world\/([a-z0-9-]{1,48})\/pvp\/(queue|status|cancel|rating|leaderboard)$/);
     if (pvpRoute) {
       const zoneId = pvpRoute[1], action = pvpRoute[2], playerId = identity.subject;
       if (request.method === "POST" && action === "queue") {
@@ -241,7 +248,7 @@ export default {
             const snapA=snapshot(playerA), snapB=snapshot(playerB);
             const initialState={a:{hp:snapA.stats.maxHp,maxHp:snapA.stats.maxHp,attack:snapA.stats.attack,defense:snapA.stats.defense,speed:snapA.stats.speed,guard:0},b:{hp:snapB.stats.maxHp,maxHp:snapB.stats.maxHp,attack:snapB.stats.attack,defense:snapB.stats.defense,speed:snapB.stats.speed,guard:0}};
             await env.DB.batch([
-              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status,turn_deadline,state_json) SELECT ?,?,?,?,?,?,?,?,'ready',datetime('now','+45 seconds'),? WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,playerRating,opponent.rating,snapA.level,snapB.level,JSON.stringify(initialState),playerId,opponent.player_id),
+              env.DB.prepare("INSERT INTO pvp_matches(match_id,zone_id,player_a,player_b,rating_a,rating_b,level_a,level_b,status,turn_deadline,state_json,season_id) SELECT ?,?,?,?,?,?,?,?,'ready',datetime('now','+45 seconds'),?,(SELECT season_id FROM pvp_seasons WHERE status='active' ORDER BY starts_at DESC LIMIT 1) WHERE EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued') AND EXISTS(SELECT 1 FROM pvp_queue WHERE player_id=? AND status='queued')").bind(matchId,zoneId,playerId,opponent.player_id,playerRating,opponent.rating,snapA.level,snapB.level,JSON.stringify(initialState),playerId,opponent.player_id),
               env.DB.prepare("INSERT INTO pvp_match_loadouts(match_id,player_id,player_level,equipment_revision,loadout_json,stats_json) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,playerId,snapA.level,snapA.revision,JSON.stringify(snapA.loadout),JSON.stringify(snapA.stats),matchId),
               env.DB.prepare("INSERT INTO pvp_match_loadouts(match_id,player_id,player_level,equipment_revision,loadout_json,stats_json) SELECT ?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,opponent.player_id,snapB.level,snapB.revision,JSON.stringify(snapB.loadout),JSON.stringify(snapB.stats),matchId),
               env.DB.prepare("INSERT INTO pvp_match_participants(match_id,player_id) SELECT ?,? WHERE EXISTS(SELECT 1 FROM pvp_matches WHERE match_id=?)").bind(matchId,playerId,matchId),
@@ -265,6 +272,16 @@ export default {
           const queued = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued' AND zone_id=?").bind(playerId,zoneId).first<{rating:number;queued_at:string}>();
           return json(queued ? {status:"queued",rating:queued.rating,queuedAt:queued.queued_at} : {status:"idle"});
         } catch { return json({error:"pvp_status_failed"},500); }
+      }
+      if (request.method === "GET" && action === "leaderboard") {
+        try {
+          const season=await env.DB.prepare("SELECT season_id,name,starts_at,ends_at FROM pvp_seasons WHERE status='active' ORDER BY starts_at DESC LIMIT 1").first<{season_id:string;name:string;starts_at:string;ends_at:string|null}>();
+          if (!season) return json({season:null,entries:[]});
+          const rawLimit=Number(url.searchParams.get("limit")??20);
+          const limit=Number.isFinite(rawLimit)?Math.max(1,Math.min(50,Math.floor(rawLimit))):20;
+          const rows=await env.DB.prepare("SELECT player_id,rating,matches_played,wins,losses,draws FROM pvp_season_ratings WHERE season_id=? ORDER BY rating DESC,matches_played DESC,player_id ASC LIMIT ?").bind(season.season_id,limit).all<Record<string,unknown>>();
+          return json({season,entries:rows.results.map((row,index)=>({rank:index+1,playerId:row.player_id,rating:row.rating,matchesPlayed:row.matches_played,wins:row.wins,losses:row.losses,draws:row.draws}))});
+        } catch { return json({error:"pvp_leaderboard_unavailable"},500); }
       }
       if (request.method === "GET" && action === "rating") {
         try {
