@@ -27,3 +27,9 @@ CREATE TABLE IF NOT EXISTS pvp_rating_log (
   after_b INTEGER NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One active match per player, while allowing unlimited historical matches.
+CREATE TABLE IF NOT EXISTS pvp_active_players (
+  player_id TEXT PRIMARY KEY,
+  match_id TEXT NOT NULL UNIQUE REFERENCES pvp_matches(match_id) ON DELETE CASCADE
+);
