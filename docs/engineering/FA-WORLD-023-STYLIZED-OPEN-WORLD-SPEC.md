@@ -116,6 +116,7 @@ FA-WORLD-032: validated one-cell cardinal bridge links integrated with A* and th
 FA-WORLD-033: D1 world presence, revisioned zone snapshots, movement CAS/event log and serialized browser sync; terrain/bridge authority, authentication and rate limiting remain pending.
 FA-WORLD-034: authenticated server authority, terrain/bridge validation, zone-state schemas, rate limiting and remote snapshot reconciliation.
 FA-WORLD-035: prioritized progressive chunk loading, bounded per-frame preparation, LRU retention, fog-to-world transitions synchronized across terrain, props and instanced vegetation; current sector remains finite 64×64 and remote persistence is deferred.
-FA-WORLD-036: deterministic day/night + weather lighting profiles, derivative-based stylized diffuse/rim material response and fog attenuation for terrain/props/instanced vegetation; no PBR, shadow maps or GPU benchmark claimed.
+FA-WORLD-036: deterministic day/night + weather lighting profiles, derivative-based stylized diffuse/rim material response and fog attenuation for terrain/props/instanced vegetation; no PBR or shadow maps claimed.
+FA-WORLD-037: rolling RAF/CPU frame-time telemetry, optional WebGL2 disjoint GPU timer queries, bounded asynchronous query queue, GPU-time hysteresis and adaptive backing resolution; device-specific benchmark captures remain pending.
 
 No merge or deployment is authorized by completion of these tasks.
