@@ -43,9 +43,9 @@ export function getNpcFormationSlot(
 ): TileCoordinate {
   const safeIndex = Number.isInteger(memberIndex) ? Math.max(0, memberIndex) : 0;
   const safeSpacing = Number.isFinite(spacing) ? Math.max(1, spacing) : 2;
-  const length = Math.hypot(facing.i, facing.j) || 1;
-  const forwardI = facing.i / length;
-  const forwardJ = facing.j / length;
+  const length = Math.hypot(facing.i, facing.j);
+  const forwardI = length > 0 ? facing.i / length : 1;
+  const forwardJ = length > 0 ? facing.j / length : 0;
   const sideI = -forwardJ;
   const sideJ = forwardI;
   const rank = Math.floor(safeIndex / 2) + 1;
