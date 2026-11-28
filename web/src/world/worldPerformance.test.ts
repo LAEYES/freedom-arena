@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FrameTimeMonitor } from './worldPerformance';
+import { AdaptiveRenderScale, FrameTimeMonitor } from './worldPerformance';
 
 describe('bounded frame-time telemetry', () => {
   it('summarizes mean, median, p95, p99 and derived FPS', () => {
