@@ -239,7 +239,7 @@ export default {
       }
       if (request.method === "GET" && action === "status") {
         try {
-          const match = await env.DB.prepare("SELECT m.match_id,m.zone_id,m.player_a,m.player_b,m.rating_a,m.rating_b,m.level_a,m.level_b,m.status,m.winner_id,m.created_at undefined").bind(playerId).first<Record<string,unknown>>();
+          const match = await env.DB.prepare("SELECT m.match_id,m.zone_id,m.player_a,m.player_b,m.rating_a,m.rating_b,m.level_a,m.level_b,m.status,m.winner_id,m.turn_number,m.turn_deadline,m.created_at FROM pvp_match_participants p JOIN pvp_matches m ON m.match_id=p.match_id WHERE p.player_id=? AND m.status IN ('ready','active') ORDER BY m.created_at DESC LIMIT 1").bind(playerId).first<Record<string,unknown>>();
           if (match) return json({match});
           const queued = await env.DB.prepare("SELECT rating,queued_at FROM pvp_queue WHERE player_id=? AND status='queued' AND zone_id=?").bind(playerId,zoneId).first<{rating:number;queued_at:string}>();
           return json(queued ? {status:"queued",rating:queued.rating,queuedAt:queued.queued_at} : {status:"idle"});
@@ -327,7 +327,7 @@ export default {
         if (confirmed?.status==="completed") {
           await applyPvpRatingSettlement(env.DB,matchId);
         }
-        return json({matchId,status:confirmed?.status,turnNumber:confirmed?.turn_number,winnerId:confirmed?.winner_id,state,damage,action:combatAction});
+        return json({matchId,status:confirmed?.status,turnNumber:confirmed?.turn_number,winnerId:confirmed?.winner_id,state:parseState(nextState),damage,action:combatAction});
       } catch { return json({error:"pvp_action_failed"},500); }
     }
 
