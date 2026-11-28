@@ -63,9 +63,11 @@ export function seededRandom(seed: number): () => number {
 export function createAsset(kind: MaterialKind, biome: Biome, seed: number, tileSize: 64 | 128 | 256 = 64): AssetDescriptor {
   return { id: `fa:${biome}:${kind}:${seed >>> 0}`, kind, biome, seed: seed >>> 0, tileSize, palette: PALETTES[biome][kind], version: 1 };
 }
-function cellRandom(seed: number, column: number, row: number): number {
-  const wrappedColumn = column === 15 ? 0 : column;
-  const wrappedRow = row === 15 ? 0 : row;
+export function tileableCellValue(seed: number, column: number, row: number, gridSize = 16): number {
+  const normalizedColumn = ((column % gridSize) + gridSize) % gridSize;
+  const normalizedRow = ((row % gridSize) + gridSize) % gridSize;
+  const wrappedColumn = normalizedColumn === gridSize - 1 ? 0 : normalizedColumn;
+  const wrappedRow = normalizedRow === gridSize - 1 ? 0 : normalizedRow;
   const mixed = (seed ^ Math.imul(wrappedColumn + 1, 0x45d9f3b) ^ Math.imul(wrappedRow + 1, 0x119de1f3)) >>> 0;
   return seededRandom(mixed)();
 }
@@ -81,9 +83,9 @@ export function paintProceduralTile(ctx: CanvasRenderingContext2D, asset: AssetD
 
   for (let row = 0; row < count; row++) {
     for (let column = 0; column < count; column++) {
-      const roll = cellRandom(seed, column % 16, row % 16);
+      const roll = tileableCellValue(seed, column % 16, row % 16);
       if (roll < (kind === 'water' ? .38 : kind === 'snow' ? .24 : .34)) {
-        const shadeIndex = Math.min(2, Math.floor(cellRandom(seed ^ 0x6d2b79f5, column % 16, row % 16) * 3));
+        const shadeIndex = Math.min(2, Math.floor(tileableCellValue(seed ^ 0x6d2b79f5, column % 16, row % 16) * 3));
         ctx.fillStyle = palette.shades[shadeIndex];
         const px = x + column * cell, py = y + row * cell;
         ctx.fillRect(px, py, Math.min(cell, x + tileSize - px), Math.min(cell, y + tileSize - py));
@@ -97,14 +99,14 @@ export function paintProceduralTile(ctx: CanvasRenderingContext2D, asset: AssetD
     ctx.globalAlpha = kind === 'lava' ? .72 : .38;
     ctx.lineWidth = Math.max(1, tileSize / 64);
     for (let i = 0; i < 4; i++) {
-      const yy = y + Math.floor(detailRandom() * Math.max(1, tileSize / 4)) * 4;
+      const yy = y + 4 + Math.floor(detailRandom() * Math.max(1, tileSize / 4 - 2)) * 4;
       ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + tileSize, yy); ctx.stroke();
     }
   } else if (kind === 'rock') {
     ctx.fillStyle = palette.accent;
     ctx.globalAlpha = .42;
     for (let i = 0; i < 5; i++) {
-      const px = x + Math.floor(detailRandom() * 12) * (tileSize / 12);
+      const px = x + (1 + Math.floor(detailRandom() * 10)) * (tileSize / 12);
       const py = y + Math.floor(detailRandom() * 12) * (tileSize / 12);
       ctx.fillRect(px, py, Math.max(2, tileSize / 24), Math.max(2, tileSize / 32));
     }
@@ -121,7 +123,7 @@ export function paintProceduralTile(ctx: CanvasRenderingContext2D, asset: AssetD
   } else if (kind === 'ground' || kind === 'snow') {
     ctx.fillStyle = palette.accent; ctx.globalAlpha = .48;
     for (let i = 0; i < 7; i++) {
-      const px = x + Math.floor(detailRandom() * 14) * (tileSize / 14);
+      const px = x + (1 + Math.floor(detailRandom() * 12)) * (tileSize / 14);
       const py = y + Math.floor(detailRandom() * 14) * (tileSize / 14);
       ctx.fillRect(px, py, Math.max(1, tileSize / 64), Math.max(2, tileSize / 24));
     }
