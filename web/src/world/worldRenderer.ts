@@ -109,18 +109,35 @@ function pushBox(
   pushQuad(output, d, c, b, a, shade(color, 0.42));
 }
 
-/** Low-poly humanoid assembled from a torso, head, arms and legs. */
-export function buildAvatarMesh(tile: TerrainTile): Float32Array {
+export type AvatarAnimation = {
+  /** World-space center coordinates; defaults to the center of the supplied tile. */
+  x?: number;
+  y?: number;
+  /** Ground elevation in world units; defaults to the supplied tile elevation. */
+  groundZ?: number;
+  /** Gait phase in radians. */
+  phase?: number;
+  /** Blend from idle (0) to full locomotion (1). */
+  walkAmount?: number;
+};
+
+/** Low-poly humanoid with deterministic procedural arm/leg swing and body bob. */
+export function buildAvatarMesh(tile: TerrainTile, animation: AvatarAnimation = {}): Float32Array {
   const output: number[] = [];
-  const x = tile.i + 0.5;
-  const y = tile.j + 0.5;
-  const ground = terrainWorldHeight(tile) + 0.015;
-  pushBox(output, { x, y, z: ground + 0.58 }, { width: 0.34, depth: 0.28, height: 0.48 }, [0.24, 0.62, 0.96]);
-  pushBox(output, { x, y, z: ground + 0.96 }, { width: 0.27, depth: 0.27, height: 0.27 }, [0.91, 0.78, 0.62]);
-  pushBox(output, { x: x - 0.23, y, z: ground + 0.59 }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
-  pushBox(output, { x: x + 0.23, y, z: ground + 0.59 }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
-  pushBox(output, { x: x - 0.10, y, z: ground + 0.20 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
-  pushBox(output, { x: x + 0.10, y, z: ground + 0.20 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
+  const x = animation.x ?? tile.i + 0.5;
+  const y = animation.y ?? tile.j + 0.5;
+  const ground = (animation.groundZ ?? terrainWorldHeight(tile)) + 0.015;
+  const walk = Math.max(0, Math.min(1, animation.walkAmount ?? 0));
+  const phase = animation.phase ?? 0;
+  const swing = Math.sin(phase) * 0.13 * walk;
+  const oppositeSwing = -swing;
+  const bob = Math.abs(Math.sin(phase * 2)) * 0.035 * walk;
+  pushBox(output, { x, y, z: ground + 0.58 + bob }, { width: 0.34, depth: 0.28, height: 0.48 }, [0.24, 0.62, 0.96]);
+  pushBox(output, { x, y, z: ground + 0.96 + bob }, { width: 0.27, depth: 0.27, height: 0.27 }, [0.91, 0.78, 0.62]);
+  pushBox(output, { x: x - 0.23, y: y + oppositeSwing, z: ground + 0.59 + bob }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
+  pushBox(output, { x: x + 0.23, y: y + swing, z: ground + 0.59 + bob }, { width: 0.12, depth: 0.14, height: 0.42 }, [0.18, 0.43, 0.77]);
+  pushBox(output, { x: x - 0.10, y: y + swing, z: ground + 0.20 + bob * 0.35 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
+  pushBox(output, { x: x + 0.10, y: y + oppositeSwing, z: ground + 0.20 + bob * 0.35 }, { width: 0.13, depth: 0.17, height: 0.34 }, [0.13, 0.19, 0.29]);
   return new Float32Array(output);
 }
 
