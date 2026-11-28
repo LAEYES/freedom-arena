@@ -64,11 +64,34 @@ export function updateNpcBehavior(
   else if (state === 'CHASE' && (range > disengageRadius || distance(agent.home, player) > maxChaseTiles)) state = 'RETURN';
   else if (state === 'RETURN' && distance(agent.position, agent.home) === 0) state = 'PATROL';
 
-  const target = state === 'CHASE' ? player : state === 'RETURN' ? agent.home : null;
-  const targetKey = target ? key(target) : null;
   const blockedTiles = new Set(config.blockedTiles ?? []);
   blockedTiles.delete(key(agent.position));
-  if (target) blockedTiles.delete(key(target));
+  let target: TileCoordinate | null = state === 'RETURN' ? agent.home : null;
+  let candidatePath: TileCoordinate[] | null = null;
+  let targetKey: string | null = target ? key(target) : null;
+
+  if (state === 'CHASE') {
+    // Keep the player's tile occupied: NPCs pursue an adjacent interaction tile,
+    // never the player's exact cell.
+    blockedTiles.add(key(player));
+    const adjacentTargets = [
+      { i: player.i - 1, j: player.j },
+      { i: player.i + 1, j: player.j },
+      { i: player.i, j: player.j - 1 },
+      { i: player.i, j: player.j + 1 },
+    ];
+    for (const candidate of adjacentTargets) {
+      if (isTileBlocked(map, candidate.i, candidate.j, blockedTiles)) continue;
+      const path = findTerrainPath(map, agent.position, candidate, {
+        allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
+      });
+      if (path.length && (!candidatePath || path.length < candidatePath.length)) {
+        target = candidate;
+        candidatePath = path;
+      }
+    }
+    targetKey = key(player) + '>' + (target ? key(target) : 'unreachable');
+  }
 
   const nextPathTile = agent.path[agent.pathIndex + 1];
   const pathBlocked = !!nextPathTile && isTileBlocked(map, nextPathTile.i, nextPathTile.j, blockedTiles);
@@ -79,7 +102,7 @@ export function updateNpcBehavior(
 
   if (needsPath) {
     if (target) {
-      const candidate = findTerrainPath(map, agent.position, target, {
+      const candidate = candidatePath ?? findTerrainPath(map, agent.position, target, {
         allowDiagonal: false, blockedTiles, maxExpandedNodes: 4096,
       });
       path = candidate.length ? candidate : [agent.position];
@@ -88,7 +111,7 @@ export function updateNpcBehavior(
     } else {
       path = [agent.position];
       pathIndex = 0;
-      nextTargetKey = null;
+      nextTargetKey = targetKey;
     }
   }
 
