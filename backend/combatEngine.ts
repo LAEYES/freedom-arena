@@ -184,3 +184,23 @@ export function buildEquippedCombatant(level: number, cards: StoredCard[], loado
   };
   return buildPlayerCombatant(level, equipped.length ? aggregate : null);
 }
+
+export type LootDrop = { itemId: string; quantity: number };
+const LOOT_TABLE: Array<{ itemId: string; chance: number; min: number; max: number }> = [
+  { itemId: "scrap_metal", chance: 0.75, min: 1, max: 3 },
+  { itemId: "arcane_shard", chance: 0.22, min: 1, max: 2 },
+  { itemId: "medicinal_herb", chance: 0.35, min: 1, max: 2 },
+];
+
+export function resolveVictoryLoot(victory: boolean, rolls: number[]): LootDrop[] {
+  if (!victory) return [];
+  const drops: LootDrop[] = [];
+  LOOT_TABLE.forEach((entry, index) => {
+    const chanceRoll = rollAt(rolls, 30 + index * 2);
+    const quantityRoll = rollAt(rolls, 31 + index * 2);
+    if (chanceRoll < entry.chance) {
+      drops.push({ itemId: entry.itemId, quantity: entry.min + Math.floor(quantityRoll * (entry.max - entry.min + 1)) });
+    }
+  });
+  return drops;
+}
