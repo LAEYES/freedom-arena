@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendance : FA-WORLD-004
-- Statut : implémentation et tests ajoutés ; CI en attente.
+- Statut : VALIDATED — CI réussie.
 
 ## Mécanique de navigation
 
@@ -53,4 +53,12 @@ Le moteur de navigation est indépendant des anciennes fonctions `findTilePath` 
 - paramètres invalides,
 - validation du coût d'un chemin.
 
-La validation finale dépend de GitHub Actions.
+## Résultats de qualification
+
+- GitHub Actions — Web build, run #160 : **success**.
+- Vitest : **53/53 tests réussis**, 8 fichiers de test.
+- TypeScript : **success**.
+- Vite production build : **success**, 69 modules transformés.
+- Hostinger Deploy, run #90 : build réussi ; étape `Upload dist to Hostinger` **skipped** car pull request.
+
+**FA-WORLD-005 : VALIDATED.** A* pondéré, collisions statiques/dynamiques et règles anti-corner-cutting sont validés.
