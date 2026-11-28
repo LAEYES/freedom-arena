@@ -192,14 +192,14 @@ export function npcAnimationPhase(actorId: string): number {
   return ((hash >>> 0) / 4294967296) * Math.PI * 2;
 }
 
-export type NpcAnimation = { phase?: number; amount?: number };
+export type NpcAnimation = { phase?: number; amount?: number; x?: number; y?: number; groundZ?: number };
 
 /** Build a compact humanoid faction NPC with faction-coded armor and procedural idle/patrol gait. */
 export function buildNpcMesh(actor: WorldActorVisual, groundTile: TerrainTile, animation: NpcAnimation = {}): Float32Array {
   const output: number[] = [];
-  const x = actor.x + 0.5;
-  const y = actor.y + 0.5;
-  const z = terrainWorldHeight(groundTile) + 0.015;
+  const x = (animation.x ?? actor.x) + 0.5;
+  const y = (animation.y ?? actor.y) + 0.5;
+  const z = (animation.groundZ ?? terrainWorldHeight(groundTile)) + 0.015;
   const armor = FACTION_COLORS[actor.faction];
   const cloth: RGB = actor.role === 'mystic' ? [0.24, 0.16, 0.42] : [0.15, 0.20, 0.28];
   const amount = Math.max(0, Math.min(1, animation.amount ?? 0));
