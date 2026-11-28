@@ -21,9 +21,9 @@ describe('local NPC tactical behavior', () => {
       state: 'ALERT' as const,
       stateElapsedMs: 0,
     };
-    const held = updateNpcBehavior(map, alerted, { i: 28, j: 28 }, 1000, { alertHoldMs: 1800 });
+    const held = updateNpcBehavior(map, alerted, { i: 28, j: 28 }, 100, { alertHoldMs: 180 });
     expect(held.state).toBe('ALERT');
-    const expired = updateNpcBehavior(map, held, { i: 28, j: 28 }, 900, { alertHoldMs: 1800 });
+    const expired = updateNpcBehavior(map, held, { i: 28, j: 28 }, 100, { alertHoldMs: 180 });
     expect(expired.state).toBe('PATROL');
   });
 
