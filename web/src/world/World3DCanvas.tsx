@@ -220,7 +220,6 @@ export function World3DCanvas({
     let weatherBuffer: WebGLBuffer | null = null;
     let frameId = 0;
     let previousTime = 0;
-    let elapsedSinceMove = 0;
     let terrainVertexCount = 0;
     let positionLocation = -1;
     let colorLocation = -1;
@@ -357,17 +356,35 @@ export function World3DCanvas({
         const currentPosition = positionRef.current;
         const currentTile = getTerrainTile(terrainMap, currentPosition.i, currentPosition.j)
           ?? terrainMap.tiles[0];
-        const avatarVertices = buildAvatarMesh(currentTile);
+        const movementPose = movementRef.current;
+        const nextPosition = movementPose?.path[movementPose.index];
+        const progress = movementPose && nextPosition
+          ? clamp(movementPose.elapsed / 145, 0, 1)
+          : 0;
+        const nextTile = nextPosition
+          ? getTerrainTile(terrainMap, nextPosition.i, nextPosition.j)
+          : null;
+        const avatarX = currentPosition.i + 0.5 + (nextPosition ? (nextPosition.i - currentPosition.i) * progress : 0);
+        const avatarY = currentPosition.j + 0.5 + (nextPosition ? (nextPosition.j - currentPosition.j) * progress : 0);
+        const groundZ = nextTile
+          ? terrainWorldHeight(currentTile) + (terrainWorldHeight(nextTile) - terrainWorldHeight(currentTile)) * progress
+          : terrainWorldHeight(currentTile);
+        const avatarVertices = buildAvatarMesh(currentTile, {
+          x: avatarX,
+          y: avatarY,
+          groundZ,
+          phase: time * 0.012,
+          walkAmount: movementPose && nextPosition ? 1 : 0,
+        });
         gl.bindBuffer(gl.ARRAY_BUFFER, avatarBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, avatarVertices, gl.DYNAMIC_DRAW);
         bindVertexLayout();
         gl.drawArrays(gl.TRIANGLES, 0, avatarVertices.length / 6);
 
-        const movement = movementRef.current;
-        if (movement) {
-          elapsedSinceMove += delta;
-          while (elapsedSinceMove >= 145 && movementRef.current) {
-            elapsedSinceMove -= 145;
+        if (movementPose) {
+          movement.elapsed += delta;
+          while (movement.elapsed >= 145 && movementRef.current) {
+            movement.elapsed -= 145;
             const active = movementRef.current;
             const next = active.path[active.index];
             if (!next) {
@@ -391,8 +408,6 @@ export function World3DCanvas({
             }));
             if (active.index >= active.path.length) movementRef.current = null;
           }
-        } else {
-          elapsedSinceMove = 0;
         }
 
         frameId = window.requestAnimationFrame(draw);
