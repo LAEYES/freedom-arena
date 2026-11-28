@@ -1,6 +1,7 @@
 import type { TileCoordinate } from './coordinates';
 import { getTerrainTile, type TerrainMap } from './terrain';
 import { tileKey } from './navigation';
+import { hasTerrainLineOfSight } from './npcPerception';
 
 export type NpcCoverCandidate = {
   position: TileCoordinate;
@@ -48,4 +49,38 @@ export function findNpcCoverPositions(
     || a.position.j - b.position.j
     || a.position.i - b.position.i,
   );
+}
+
+export type NpcDirectionalCoverCandidate = NpcCoverCandidate & {
+  blocksThreatLineOfSight: boolean;
+  threatDistance: number;
+};
+
+/**
+ * Ranks terrain cover relative to a specific threat. A position is considered
+ * directionally protected only when the terrain grid blocks the ray to the threat.
+ * This is geometric LOS, not ballistic or projectile simulation.
+ */
+export function findNpcDirectionalCoverPositions(
+  map: TerrainMap,
+  origin: TileCoordinate,
+  threat: TileCoordinate,
+  radius = 8,
+  occupied: ReadonlySet<string> = new Set(),
+): NpcDirectionalCoverCandidate[] {
+  return findNpcCoverPositions(map, origin, radius, occupied)
+    .map(candidate => ({
+      ...candidate,
+      blocksThreatLineOfSight: !hasTerrainLineOfSight(map, candidate.position, threat),
+      threatDistance: Math.abs(candidate.position.i - threat.i)
+        + Math.abs(candidate.position.j - threat.j),
+    }))
+    .sort((a, b) =>
+      Number(b.blocksThreatLineOfSight) - Number(a.blocksThreatLineOfSight)
+      || (a.cover === 'HARD' ? 0 : 1) - (b.cover === 'HARD' ? 0 : 1)
+      || a.exposure - b.exposure
+      || b.threatDistance - a.threatDistance
+      || a.position.j - b.position.j
+      || a.position.i - b.position.i,
+    );
 }
