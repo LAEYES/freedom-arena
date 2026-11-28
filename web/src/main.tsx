@@ -363,9 +363,6 @@ function App() {
         : 'Conflit de synchronisation serveur : présence introuvable');
     });
     worldSyncRef.current = worldSync;
-    void worldSync.syncPosition(player.zoneId, player.worldTile).catch(() => {
-      setWorldMessage('Synchronisation monde indisponible · mode local conservé');
-    });
     let stopped = false;
     let stopPresence: (() => Promise<void>) | null = null;
     const join = async () => {
@@ -389,6 +386,14 @@ function App() {
     const client = worldSyncRef.current;
     if (!client) return;
     void client.syncPosition(player.zoneId, player.worldTile).then(result => {
+      if (result.presence
+        && (result.presence.worldTile.x !== playerRef.current.worldTile.x
+          || result.presence.worldTile.y !== playerRef.current.worldTile.y)) {
+        const authoritativeTile = result.presence.worldTile;
+        update({ ...playerRef.current, worldTile: authoritativeTile });
+        setWorldTile(authoritativeTile);
+        setWorldMessage('Position restaurée depuis le serveur');
+      }
       if (!result.ok && result.conflict) {
         setWorldMessage('Conflit de position détecté par le serveur · rechargement requis');
       }
