@@ -412,6 +412,7 @@ export function World3DCanvas({
               disengageRadius: tacticalProfile.disengageRadius,
               maxChaseTiles: tacticalProfile.maxChaseTiles,
               stepDurationMs: tacticalProfile.stepDurationMs,
+              alertHoldMs: 6000,
             });
             npcBehaviorAgentsRef.current[index] = behaviorAgent;
             if (previousBehaviorState !== 'ALERT' && behaviorAgent.state === 'ALERT') {
