@@ -7,6 +7,7 @@ export interface CharacterSpriteOptions {
   role: CharacterRole;
   frame: number;
   hostile?: boolean;
+  facing?: 1 | -1;
 }
 const FACTION_PALETTES: Record<CharacterFaction,{armor:string;light:string;dark:string;glow:string}> = {
   Aegis:{armor:'#344e79',light:'#9bb8e8',dark:'#17253e',glow:'#b8d7ff'},
@@ -34,6 +35,10 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
     ctx.fillRect(centerX+dx*unit,centerY+dy*unit,width*unit,height*unit);
   };
   ctx.save();
+  const facing = options.facing === -1 ? -1 : 1;
+  ctx.translate(centerX, centerY);
+  ctx.scale(facing, 1);
+  ctx.translate(-centerX, -centerY);
   ctx.imageSmoothingEnabled=false;
   ctx.fillStyle='rgba(0,0,0,.34)';
   ctx.beginPath();ctx.ellipse(centerX,centerY+8*unit,7*unit,2*unit,0,0,Math.PI*2);ctx.fill();
