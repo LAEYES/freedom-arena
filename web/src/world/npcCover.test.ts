@@ -2,7 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { findNpcCoverPositions } from './npcCover';
 import { generateTerrainMap } from './terrain';
 
-const map = generateTerrainMap({ width: 32, height: 32, seed: 77, spawnI: 16, spawnJ: 16, spawnSafeRadius: 15 });
+const baseMap = generateTerrainMap({ width: 32, height: 32, seed: 77, spawnI: 16, spawnJ: 16, spawnSafeRadius: 15 });
+const map = {
+  ...baseMap,
+  tiles: baseMap.tiles.map(tile =>
+    tile.i === 17 && tile.j === 16 ? { ...tile, kind: 'forest' as const, walkable: true }
+      : tile.i === 16 && tile.j === 17 ? { ...tile, kind: 'forest' as const, walkable: true }
+        : tile.i === 18 && tile.j === 16 ? { ...tile, kind: 'rock' as const, walkable: false }
+          : tile,
+  ),
+};
 
 describe('NPC defensive terrain positions', () => {
   it('returns only walkable, unoccupied positions with explicit cover semantics', () => {
