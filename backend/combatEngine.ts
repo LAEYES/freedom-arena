@@ -1,7 +1,7 @@
 export type CombatEffect = "burn" | "poison" | "weaken" | "expose" | "shield" | "regeneration";
 export type PersistentStatus = { type: "burn" | "poison" | "weaken"; remaining: number; potency: number };
 export type StoredCard = {
-  id?: unknown; name?: unknown; rarity?: unknown; power?: unknown;
+  id?: unknown; name?: unknown; rarity?: unknown; slot?: unknown; power?: unknown;
   defense?: unknown; vitality?: unknown; level?: unknown;
   ability?: { id?: unknown; effect?: unknown; potency?: unknown };
   resistances?: unknown;
@@ -45,12 +45,13 @@ export function buildPlayerCombatant(levelInput: number, card: StoredCard | null
 
 export function resolveCombatEncounter(
   playerLevel: number, worldThreat: number, cards: StoredCard[], equippedCardId: string | null,
-  rolls: number[], currentHp?: number | null, activeStatuses: PersistentStatus[] = [],
+  rolls: number[], currentHp?: number | null, activeStatuses: PersistentStatus[] = [], equipment?: EquipmentLoadout,
 ): CombatEncounter {
   const level = clamp(playerLevel, 1, 100);
   const threat = clamp(worldThreat, 1, 100);
-  const card = equippedCardId ? cards.find(c => c && c.id === equippedCardId) ?? null : null;
-  const playerBase = buildPlayerCombatant(level, card);
+  const loadout = equipment ?? (equippedCardId ? { weapon: equippedCardId } : {});
+  const card = loadout.weapon ? cards.find(c => c && c.id === loadout.weapon) ?? null : null;
+  const playerBase = equipment ? buildEquippedCombatant(level, cards, loadout) : buildPlayerCombatant(level, card);
   const enemyLevel = clamp(level + (threat >= 30 ? 2 : threat >= 12 ? 1 : 0) + (rollAt(rolls, 0) > 0.78 ? 1 : 0), 1, 100);
   const enemy: Combatant = {
     maxHp: clamp(62 + enemyLevel * 9 + threat, 60, 1800),
@@ -150,4 +151,36 @@ export function resolveCombatEncounter(
     equippedCardId: card && typeof card.id === "string" ? card.id : null,
     remainingStatuses: normalizeStatuses(statuses),
   };
+}
+
+export type EquipmentSlot = "weapon" | "armor" | "accessory1" | "accessory2";
+export type EquipmentLoadout = Partial<Record<EquipmentSlot, string>>;
+const EQUIPMENT_SLOTS: EquipmentSlot[] = ["weapon", "armor", "accessory1", "accessory2"];
+
+export function normalizeEquipment(value: unknown, cards: StoredCard[], legacyEquippedId?: string | null): EquipmentLoadout {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const inventory = new Set(cards.slice(0, 500).flatMap(card => typeof card?.id === "string" ? [card.id] : []));
+  const result: EquipmentLoadout = {};
+  for (const slot of EQUIPMENT_SLOTS) {
+    const id = source[slot];
+    if (typeof id === "string" && inventory.has(id) && !Object.values(result).includes(id)) result[slot] = id;
+  }
+  if (!result.weapon && typeof legacyEquippedId === "string" && inventory.has(legacyEquippedId) && !Object.values(result).includes(legacyEquippedId)) {
+    result.weapon = legacyEquippedId;
+  }
+  return result;
+}
+
+export function buildEquippedCombatant(level: number, cards: StoredCard[], loadout: EquipmentLoadout): Combatant {
+  const equipped = EQUIPMENT_SLOTS.flatMap(slot => {
+    const id = loadout[slot];
+    return id ? [cards.find(card => card && card.id === id)].filter((card): card is StoredCard => Boolean(card)) : [];
+  });
+  const aggregate: StoredCard = {
+    power: Math.min(500, equipped.reduce((sum, card) => sum + stat(card.power, 0, 250), 0)),
+    defense: Math.min(500, equipped.reduce((sum, card) => sum + stat(card.defense, 0, 250), 0)),
+    vitality: Math.min(1000, equipped.reduce((sum, card) => sum + stat(card.vitality, 0, 500), 0)),
+    level: Math.max(1, ...equipped.map(card => clamp(typeof card.level === "number" ? card.level : 1, 1, 100))),
+  };
+  return buildPlayerCombatant(level, equipped.length ? aggregate : null);
 }
