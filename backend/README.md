@@ -299,3 +299,20 @@ The Worker records command-ID reuse across actors/matches and out-of-turn action
 Run `npm run check` and `npm test` in `backend/`. This PR does not apply migrations remotely, deploy the Worker, merge the PR, or claim production concurrency certification.
 
 <!-- FA-WORLD-046 CI rerun after type-check corrections -->
+
+
+## FA-WORLD-047 seasonal ranked ladder
+
+Apply migration 013 after migration 012:
+
+```bash
+npx wrangler d1 execute freedom-arena --remote --file=./migrations/013_fa_world_047_ranked_seasons.sql
+```
+
+The global rating remains unchanged. When a match is settled while one season is active, the same Elo result is recorded in a season-scoped event ledger and applied exactly once to that season's rating table. Unique keys prevent duplicate match/player awards, and the `applied_at` marker supports safe retry. Only one active season is allowed by a partial unique index. Season creation/activation is an operator-controlled D1 action; this PR deliberately exposes no public season administration endpoint.
+
+- `GET /world/:zoneId/pvp/leaderboard?limit=20` returns the active season and its top entries. Limit is clamped to 1–50.
+- Matches completed outside an active season still update global ratings but do not count toward a seasonal ladder.
+- Ranking ties are deterministic: rating descending, matches played descending, then player ID ascending.
+
+Run `npm run check` and `npm test` from `backend/`. The pure helper tests do not replace D1 integration, migration, or concurrent transaction tests. No remote migration, deployment, merge, or automatic season rotation is performed.
