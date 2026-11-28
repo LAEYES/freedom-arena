@@ -57,7 +57,7 @@ export function GraphicsStudio() {
   };
   const exportJson=()=>{
     const data={...asset,exportedAt:new Date().toISOString(),format:'freedom-arena-asset-v1'};
-    downloadFile(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),`${asset.id.replaceAll(':','-')}.json`);
+    downloadFile(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),`${asset.id.split(':').join('-')}.json`);
   };
   const exportImage=()=>{
     const canvas=canvasRef.current;
