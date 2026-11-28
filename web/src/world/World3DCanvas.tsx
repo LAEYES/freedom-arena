@@ -26,7 +26,7 @@ import {
   terrainWorldHeight,
   buildNpcMesh,
   npcAnimationPhase,
-  buildPoiBuildingMesh,
+  buildLandmarkMesh,
   buildEventBeaconMesh,
   buildBossMesh,
   buildWeatherParticleMesh,
@@ -199,7 +199,7 @@ export function World3DCanvas({
     zone.pointsOfInterest.forEach((_, index) => {
       const position = getPoiPosition(zone, index);
       const tile = getTerrainTile(terrainMap, position.x, position.y);
-      if (tile?.walkable) append(buildPoiBuildingMesh(tile, index));
+      if (tile?.walkable) append(buildLandmarkMesh(tile, (['watchtower', 'shrine', 'ruins', 'gate'] as const)[index % 4]));
     });
     const eventPosition = getWorldEventPoint(worldEvent);
     const eventTile = getTerrainTile(terrainMap, eventPosition.x, eventPosition.y);
