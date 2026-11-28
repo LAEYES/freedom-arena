@@ -2,17 +2,12 @@ import type { ScreenPosition, WorldPosition } from './coordinates';
 import type { IsometricCamera } from './isometricCamera';
 import { projectWorldToScreen } from './isometricCamera';
 import type { TerrainTile } from './terrain';
+import { STYLIZED_TERRAIN_PALETTE } from './worldStyle';
+import type { RGB as WorldRGB } from './worldStyle';
 
-export type RGB = readonly [number, number, number];
+export type RGB = WorldRGB;
 
-export const TERRAIN_PALETTE: Record<TerrainTile['kind'], RGB> = {
-  grass: [0.20, 0.48, 0.27],
-  forest: [0.10, 0.31, 0.19],
-  water: [0.10, 0.34, 0.57],
-  rock: [0.39, 0.42, 0.48],
-  sand: [0.66, 0.52, 0.29],
-  snow: [0.72, 0.82, 0.88],
-};
+export const TERRAIN_PALETTE: Readonly<Record<TerrainTile['kind'], RGB>> = STYLIZED_TERRAIN_PALETTE;
 
 const TERRAIN_HEIGHT_SCALE = 0.12;
 const TILE_INSET = 0.035;
