@@ -32,7 +32,7 @@ describe('RPGQG core', () => {
   it('normalizes legacy saves and supports four independent equipment slots', () => {
     const legacy = normalizePlayer({ ...base, cards: [a], equippedCardId: 'a' });
     expect(legacy.equipmentSlots).toMatchObject({ weapon: 'a', head: null, chest: null, accessory: null });
-    const cards = [a, b, { ...a, id: 'c', slot: 'head' as const }, { ...b, id: 'd', slot: 'accessory' as const }];
+    const cards = [a, { ...b, slot: 'chest' as const }, { ...a, id: 'c', slot: 'head' as const }, { ...b, id: 'd', slot: 'accessory' as const }];
     const equipped = cards.reduce((state, card) => equipCardToSlot(state, card.id, card.slot ?? 'weapon'), { ...base, cards });
     expect(getEquipmentLoadout(equipped)).toMatchObject({ weapon: a, head: cards[2], accessory: cards[3] });
     expect(equipCardToSlot(equipped, null, 'head').equipmentSlots?.head).toBeNull();
