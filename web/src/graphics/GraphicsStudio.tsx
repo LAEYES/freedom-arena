@@ -22,15 +22,14 @@ export function GraphicsStudio() {
     canvas.width=size*count; canvas.height=size*count;
     ctx.imageSmoothingEnabled=false;
     for(let y=0;y<count;y++)for(let x=0;x<count;x++){
-      const tile=createAsset(material,biome,seed+y*count+x,size);
-      paintProceduralTile(ctx,tile,x*size,y*size);
+      paintProceduralTile(ctx,asset,x*size,y*size);
     }
     ctx.strokeStyle='rgba(255,255,255,.24)';
     ctx.lineWidth=Math.max(1,size/128);
     if(count>1){for(let i=1;i<count;i++){ctx.beginPath();ctx.moveTo(i*size,0);ctx.lineTo(i*size,canvas.height);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*size);ctx.lineTo(canvas.width,i*size);ctx.stroke();}}
   },[asset,biome,material,seed,size,repeat]);
 
-  const exportPng=()=>{
+  const downloadFile=(blob:Blob,fileName:string)=>{\n    const url=URL.createObjectURL(blob);\n    const link=document.createElement('a');\n    link.href=url;link.download=fileName;link.click();\n    window.setTimeout(()=>URL.revokeObjectURL(url),1000);\n  };\n\n  const exportJson=()=>{\n    const data={...asset,exportedAt:new Date().toISOString(),format:'freedom-arena-asset-v1'};\n    downloadFile(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),\`\${asset.id.replaceAll(':','-')}.json\`);\n  };\n\n  const exportPng=()=>{
     const canvas=canvasRef.current;
     if(!canvas)return;
     canvas.toBlob(blob=>{
@@ -56,7 +55,7 @@ export function GraphicsStudio() {
         <label>Résolution<select value={size} onChange={e=>setSize(Number(e.target.value) as 64|128|256)}>{SIZES.map(v=><option key={v} value={v}>{v} × {v}</option>)}</select></label>
         <label>Graine procédurale<input type="number" min="0" max="4294967295" value={seed} onChange={e=>setSeed(Math.max(0,Math.min(4294967295,Number(e.target.value)||0)))} /></label>
         <label className="graphics-check"><input type="checkbox" checked={repeat} onChange={e=>setRepeat(e.target.checked)}/> Aperçu mosaïque 3 × 3</label>
-        <div className="graphics-actions"><button type="button" onClick={()=>setSeed(Math.floor(Math.random()*4294967296))}>Nouvelle graine</button><button type="button" onClick={exportPng}>Exporter PNG</button></div>
+        <div className="graphics-actions"><button type="button" onClick={()=>setSeed(Math.floor(Math.random()*4294967296))}>Nouvelle graine</button><button type="button" onClick={exportPng}>Exporter PNG</button><button type="button" onClick={exportJson}>Exporter JSON</button></div>
         <div className="graphics-palette"><span>PALETTE ACTIVE</span><div>{[asset.palette.base,...asset.palette.shades,asset.palette.accent].map((color,i)=><i key={i} title={color} style={{backgroundColor:color}}/>)}</div></div>
       </div>
     </div>
