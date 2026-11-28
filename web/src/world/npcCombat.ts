@@ -73,11 +73,13 @@ export function planNpcInterceptionSlots(
   const plans: NpcInterceptionPlan[] = [];
   const ordered = [...members].sort((a, b) => a.id.localeCompare(b.id));
   for (const member of ordered) {
+    const memberBlocked = new Set(reserved);
+    memberBlocked.delete(tileKey(member.position.i, member.position.j));
     const options = slots.flatMap(slot => {
       if (reserved.has(tileKey(slot.i, slot.j))) return [];
       const path = findTerrainPath(map, member.position, slot, {
         allowDiagonal: false,
-        blockedTiles: reserved,
+        blockedTiles: memberBlocked,
         maxExpandedNodes: 2048,
       });
       if (path.length < 2) return [];
