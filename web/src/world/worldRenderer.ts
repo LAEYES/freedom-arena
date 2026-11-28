@@ -373,3 +373,42 @@ export function buildWorldDressingMesh(tiles: readonly TerrainTile[], seed: numb
   }
   return new Float32Array(output);
 }
+
+
+export type LandmarkKind = 'watchtower' | 'shrine' | 'ruins' | 'gate';
+
+/** Modular low-poly landmark kits; visual-only geometry, never changes navigation. */
+export function buildLandmarkMesh(tile: TerrainTile, kind: LandmarkKind): Float32Array {
+  const output: number[] = [];
+  const x = tile.i + 0.5;
+  const y = tile.j + 0.5;
+  const z = terrainWorldHeight(tile) + 0.025;
+  const stone: RGB = [0.49, 0.50, 0.48];
+  const darkStone: RGB = [0.31, 0.34, 0.35];
+  const accent: RGB = kind === 'shrine' ? [0.72, 0.48, 0.24]
+    : kind === 'gate' ? [0.31, 0.48, 0.62] : [0.58, 0.34, 0.25];
+
+  if (kind === 'watchtower') {
+    pushBox(output, { x, y, z: z + 0.08 }, { width: 1.25, depth: 1.20, height: 0.16 }, darkStone);
+    pushBox(output, { x, y, z: z + 0.92 }, { width: 0.76, depth: 0.76, height: 1.52 }, stone);
+    pushBox(output, { x, y, z: z + 1.73 }, { width: 1.02, depth: 1.02, height: 0.18 }, accent);
+    pushPyramid(output, { x, y, z: z + 1.82 }, 0.56, z + 1.82, 0.76, darkStone);
+  } else if (kind === 'shrine') {
+    pushBox(output, { x, y, z: z + 0.09 }, { width: 1.34, depth: 1.20, height: 0.18 }, darkStone);
+    pushBox(output, { x, y: y + 0.04, z: z + 0.55 }, { width: 0.70, depth: 0.62, height: 0.88 }, stone);
+    pushBox(output, { x: x - 0.42, y, z: z + 0.48 }, { width: 0.12, depth: 0.76, height: 0.82 }, accent);
+    pushBox(output, { x: x + 0.42, y, z: z + 0.48 }, { width: 0.12, depth: 0.76, height: 0.82 }, accent);
+    pushPyramid(output, { x, y, z: z + 1.00 }, 0.56, z + 1.00, 0.58, darkStone);
+  } else if (kind === 'ruins') {
+    pushBox(output, { x, y, z: z + 0.07 }, { width: 1.32, depth: 1.18, height: 0.14 }, darkStone);
+    pushBox(output, { x: x - 0.39, y, z: z + 0.46 }, { width: 0.22, depth: 0.92, height: 0.78 }, stone);
+    pushBox(output, { x: x + 0.39, y: y + 0.08, z: z + 0.34 }, { width: 0.22, depth: 0.72, height: 0.54 }, stone);
+    pushBox(output, { x: x - 0.08, y: y - 0.40, z: z + 0.83 }, { width: 0.86, depth: 0.18, height: 0.16 }, accent);
+  } else {
+    pushBox(output, { x, y, z: z + 0.07 }, { width: 1.42, depth: 1.08, height: 0.14 }, darkStone);
+    pushBox(output, { x: x - 0.43, y, z: z + 0.66 }, { width: 0.22, depth: 0.30, height: 1.18 }, stone);
+    pushBox(output, { x: x + 0.43, y, z: z + 0.66 }, { width: 0.22, depth: 0.30, height: 1.18 }, stone);
+    pushBox(output, { x, y, z: z + 1.27 }, { width: 1.12, depth: 0.36, height: 0.20 }, accent);
+  }
+  return new Float32Array(output);
+}
