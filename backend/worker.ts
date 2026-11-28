@@ -1,6 +1,6 @@
 import { isServerTraversable, validateServerMove } from './worldRules';
 import { verifySupabaseBearer, type AuthEnv } from './auth';
-import { buildEquippedCombatant, buildPlayerCombatant, normalizeEquipment, resolveCombatEncounter, type EquipmentSlot, type StoredCard } from './combatEngine';
+import { buildEquippedCombatant, normalizeEquipment, resolveCombatEncounter, type EquipmentSlot, type StoredCard } from './combatEngine';
 
 export interface Env extends AuthEnv {
   DB: D1Database;
@@ -136,6 +136,8 @@ const fromRow = (row: Record<string, unknown>) => ({
   cards: parseJson(row.cards, []),
   currentHp: row.current_hp,
   statusEffects: parseJson(row.status_effects, []),
+  equipment: parseJson(row.equipment_json, {}),
+  equipmentRevision: row.equipment_revision ?? 0,
 });
 
 export default {
