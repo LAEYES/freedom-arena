@@ -24,6 +24,9 @@ describe('independent NPC route simulation', () => {
         expect(Math.abs(previous.i - current.i) + Math.abs(previous.j - current.j)).toBe(1);
       }
     }
+    const routeTiles = first.map(agent => new Set(agent.path.map(point => point.i + ':' + point.j)));
+    const shared = [...routeTiles[0]].filter(key => routeTiles[1].has(key));
+    expect(shared).toEqual([]);
   });
 
   it('interpolates continuously and reverses at patrol endpoints', () => {
@@ -34,8 +37,9 @@ describe('independent NPC route simulation', () => {
     expect(getNpcAgentPose(moving).progress).toBeCloseTo(0.5, 5);
     expect(getNpcAgentPose(moving).x).not.toBe(initial.x);
     let completed = agent;
-    for (let index = 0; index < agent.path.length + 2; index++) {
-      completed = advanceNpcAgents([completed], agent.stepDurationMs)[0];
+    const ticks = Math.ceil((agent.path.length + 2) * agent.stepDurationMs / 100);
+    for (let index = 0; index < ticks; index++) {
+      completed = advanceNpcAgents([completed], 100)[0];
     }
     expect(completed.direction).toBe(-1);
     expect(getNpcAgentPose(completed).x).toBeGreaterThanOrEqual(0);
