@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyNpcInteraction, createStarterPlayer, fuseCards, getCardFusionCost, getNextRarity, isValidPlayerState, normalizePlayer, upgradeCard, type Card } from './game';
+import { applyNpcInteraction, createStarterPlayer, equipCardToSlot, fuseCards, getCardFusionCost, getEquipmentLoadout, getNextRarity, grantArenaReward, isValidPlayerState, normalizePlayer, upgradeCard, type Card } from './game';
 import { generateWorldEvent, getWorldEventPhase, getWorldEventPoint, getWorldEventProgress, zones } from './world';
 
 describe('RPGQG core', () => {
@@ -28,6 +28,18 @@ describe('RPGQG core', () => {
     expect(isValidPlayerState(legacy)).toBe(false);
   });
 
+  it('normalizes legacy saves and supports four independent equipment slots', () => {
+    const legacy = normalizePlayer({ ...base, cards: [a], equippedCardId: 'a' });
+    expect(legacy.equipmentSlots).toMatchObject({ weapon: 'a', head: null, chest: null, accessory: null });
+    const cards = [a, b, { ...a, id: 'c', slot: 'head' as const }, { ...b, id: 'd', slot: 'accessory' as const }];
+    const equipped = cards.reduce((state, card) => equipCardToSlot(state, card.id, card.slot ?? 'weapon'), { ...base, cards });
+    expect(getEquipmentLoadout(equipped)).toMatchObject({ weapon: a, head: cards[2], accessory: cards[3] });
+    expect(equipCardToSlot(equipped, null, 'head').equipmentSlots?.head).toBeNull();
+  });
+  it('assigns deterministic equipment slots to newly generated rewards', () => {
+    expect(grantArenaReward(base).cards[0].slot).toBe('weapon');
+    expect(grantArenaReward({ ...base, arenaWins: 1 }).cards[0].slot).toBe('head');
+  });
   it('applies a single card upgrade', () => {
     expect(upgradeCard(a, 100)).toMatchObject({ level: 2, power: 13, defense: 7, vitality: 25 });
   });
