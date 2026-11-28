@@ -1,8 +1,19 @@
 export type CharacterFaction = 'Aegis' | 'Nomads' | 'Eclipse' | 'Neutral';
 export type CharacterPose = 'idle' | 'walk' | 'attack';
 export type CharacterRole = 'vanguard' | 'scout' | 'mystic';
+export interface CharacterEquipmentVisual {
+  tier: 1 | 2 | 3;
+  accent: string;
+}
+export function getCharacterEquipmentVisual(rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | string, power: number, defense: number, vitality: number): CharacterEquipmentVisual | undefined {
+  if (!rarity || rarity === 'Common') return undefined;
+  const tier = rarity === 'Legendary' ? 3 : rarity === 'Epic' ? 2 : 1;
+  const accent = rarity === 'Legendary' ? '#f4c96b' : rarity === 'Epic' ? '#c49be7' : '#75c9dc';
+  return { tier, accent };
+}
 export interface CharacterSpriteOptions {
   faction: CharacterFaction;
+  equipment?: CharacterEquipmentVisual;
   pose: CharacterPose;
   role: CharacterRole;
   frame: number;
@@ -94,6 +105,14 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   rect(light,-2,-4,4,2);rect(palette.glow,-1,-3,2,1);
   rect(armor,-7,-5,3,4);rect(armor,4,-5,3,4);
   rect(dark,-5,3,10,2);
+  // Cosmetic equipment overlay derived from the equipped card rarity; combat stats remain untouched.
+  if (options.equipment) {
+    const gear = options.equipment;
+    rect(gear.accent,-5,-5,2,3);
+    rect(gear.accent,3,-5,2,3);
+    if (gear.tier >= 2) { rect(dark,-6,-6,2,3); rect(dark,4,-6,2,3); rect(gear.accent,-6,-6,2,1); rect(gear.accent,4,-6,2,1); }
+    if (gear.tier >= 3) { rect(gear.accent,-2,-6,4,1); rect(gear.accent,-1,-13,2,1); }
+  }
   // Modular armor detail layer: faction trim, belt clasp and chest insignia.
   const layers = getCharacterLayerProfile(options.faction, options.role);
   rect(layers.armorTrim,-4,2,8,1);
