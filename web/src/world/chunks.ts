@@ -144,10 +144,15 @@ export class ChunkManager {
 
     for (let chunkY = centerChunk.chunkY - radiusChunks; chunkY <= centerChunk.chunkY + radiusChunks; chunkY++) {
       for (let chunkX = centerChunk.chunkX - radiusChunks; chunkX <= centerChunk.chunkX + radiusChunks; chunkX++) {
+        const bounds = getChunkBounds(this.map, chunkX, chunkY, this.options.chunkSize);
+        if (!bounds) continue;
+        const key = chunkKey(chunkX, chunkY);
+        nextVisible.add(key);
+        // Mark each requested chunk visible before loading it so LRU eviction
+        // cannot discard an earlier member of the same visible window.
+        this.visibleKeys = nextVisible;
         const chunk = this.loadChunk(chunkX, chunkY);
-        if (!chunk) continue;
-        nextVisible.add(chunk.key);
-        loaded.push(chunk);
+        if (chunk) loaded.push(chunk);
       }
     }
 
