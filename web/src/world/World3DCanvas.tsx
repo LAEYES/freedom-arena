@@ -522,6 +522,14 @@ export function World3DCanvas({
                 return [{ id: memberId, position: active.position, state: active.state }];
               });
               const electedLeader = electNpcSquadLeader(activeSquad);
+              if (electedLeader && electedLeader.id !== squadState.leaderId) {
+                squadFormationStatesRef.current.delete(squadState.leaderId);
+                squadState.leaderId = electedLeader.id;
+                squadState.anchor = { i: electedLeader.position.i, j: electedLeader.position.j };
+                squadState.elapsedMs = 0;
+                squadFormationStatesRef.current.set(electedLeader.id, squadState);
+                for (const memberId of squadState.memberIds) npcSquadMembershipRef.current.set(memberId, electedLeader.id);
+              }
               if (electedLeader?.id === actor.id && squadState.leaderId === actor.id
                 && shouldRefreshNpcFormation(squadState.anchor, behaviorAgent.position, squadState.elapsedMs, { displacementTiles: 2, cooldownMs: 900 })) {
                 const leaderTile = behaviorAgent.position;
