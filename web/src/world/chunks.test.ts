@@ -101,13 +101,13 @@ describe('world chunk manager', () => {
     expect(first.loadedThisFrame).toBe(2);
     expect(first.pending).toBe(7);
     expect(first.chunks).toHaveLength(2);
-    expect(first.chunks[0].key).toBe('1:1');
-    expect(first.chunks[1].key).toBe('2:1');
+    expect(first.chunks[0].key).toBe('2:1');
+    expect(first.chunks[1].key).toBe('2:2');
 
     const second = streamer.tick(16, 2);
     expect(second.loadedThisFrame).toBe(2);
     expect(second.chunks).toHaveLength(4);
-    expect(streamer.getOpacity('1:1')).toBeCloseTo(32 / 220);
+    expect(streamer.getOpacity('2:2')).toBeCloseTo(16 / 220);
   });
 
   it('reprioritizes pending chunks when the player crosses into another chunk', () => {
