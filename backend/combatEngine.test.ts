@@ -28,3 +28,17 @@ test("invalid and missing equipped card safely falls back to base stats", () => 
   assert.equal(result.equippedCardId, null);
   assert.equal(result.player.attack, buildPlayerCombatant(1, null).attack);
 });
+
+test("persistent health is used as the combat starting point", () => {
+  const full = resolveCombatEncounter(8, 1, [], null, Array(40).fill(0.5));
+  const injured = resolveCombatEncounter(8, 1, [], null, Array(40).fill(0.5), Math.floor(full.player.maxHp / 2));
+  assert.equal(injured.player.remainingHp <= Math.floor(full.player.maxHp / 2), true);
+  assert.equal(injured.player.maxHp, full.player.maxHp);
+});
+
+test("zero health cannot act in the combat simulation", () => {
+  const result = resolveCombatEncounter(8, 1, [], null, Array(40).fill(0.5), 0);
+  assert.equal(result.player.remainingHp, 0);
+  assert.equal(result.turns.length, 0);
+  assert.equal(result.victory, false);
+});
