@@ -349,7 +349,7 @@ export type WorldDressingLod = 'high' | 'medium' | 'low';
 export function buildWorldDressingMesh(
   tiles: readonly TerrainTile[],
   seed: number,
-  options: { lod?: WorldDressingLod } = {},
+  options: { lod?: WorldDressingLod; includeVegetation?: boolean } = {},
 ): Float32Array {
   const output: number[] = [];
   const lod = options.lod ?? 'high';
@@ -368,7 +368,7 @@ export function buildWorldDressingMesh(
       variant = 'shrub';
     }
 
-    if (variant) {
+    if (variant && options.includeVegetation !== false) {
       const simplifiedVariant = lod === 'low' ? 'shrub' : variant;
       const mesh = buildVegetationMesh(tile, simplifiedVariant, seed);
       for (const value of mesh) output.push(value);
@@ -380,6 +380,51 @@ export function buildWorldDressingMesh(
       pushPyramid(output, { x, y, z }, 0.25 * scale, z, 0.42 * scale, [0.47, 0.49, 0.51]);
     }
   }
+  return new Float32Array(output);
+}
+
+
+/**
+ * Compact per-instance records: world position XYZ, uniform scale, RGB tint.
+ * The GPU expands each record from one shared low-poly foliage template.
+ */
+export function buildVegetationInstances(
+  tiles: readonly TerrainTile[],
+  seed: number,
+  options: { lod?: WorldDressingLod } = {},
+): Float32Array {
+  const lod = options.lod ?? 'high';
+  const densityScale = lod === 'high' ? 1 : lod === 'medium' ? 0.58 : 0.24;
+  const output: number[] = [];
+  for (const tile of tiles) {
+    const density = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-density');
+    let tree = false;
+    let shrub = false;
+    if (tile.kind === 'forest' && density < 0.34 * densityScale) tree = true;
+    else if (tile.kind === 'grass' && density < 0.075 * densityScale) {
+      shrub = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-variant') < 0.72;
+      tree = !shrub;
+    } else if (tile.kind === 'snow' && density < 0.055 * densityScale) tree = true;
+    else if (tile.kind === 'sand' && density < 0.025 * densityScale) shrub = true;
+    if (!tree && !shrub) continue;
+
+    const x = tile.i + 0.25 + worldPlacementSample(seed, tile.i, tile.j, 'vegetation-x') * 0.5;
+    const y = tile.j + 0.25 + worldPlacementSample(seed, tile.i, tile.j, 'vegetation-y') * 0.5;
+    const z = terrainWorldHeight(tile) + 0.02;
+    const style = getBiomeStyle(vegetationBiome(tile));
+    const lodScale = lod === 'low' ? 0.62 : lod === 'medium' ? 0.86 : 1;
+    const scale = lodScale * (shrub ? 0.62 : 1);
+    output.push(x, y, z, scale, style.foliage[0], style.foliage[1], style.foliage[2]);
+  }
+  return new Float32Array(output);
+}
+
+/** Shared local-space low-poly foliage template; each instance applies XYZ translation and scale. */
+export function buildVegetationInstanceTemplate(): Float32Array {
+  const output: number[] = [];
+  const center = { x: 0, y: 0, z: 0 };
+  pushPyramid(output, center, 0.48, 0, 0.78, [1, 1, 1]);
+  pushPyramid(output, center, 0.34, 0.48, 0.72, [0.82, 0.92, 0.82]);
   return new Float32Array(output);
 }
 
