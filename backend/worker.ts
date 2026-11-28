@@ -134,6 +134,8 @@ const fromRow = (row: Record<string, unknown>) => ({
   npcMemories: parseJson(row.npc_memories, []),
   quests: parseJson(row.quests, []),
   cards: parseJson(row.cards, []),
+  currentHp: row.current_hp,
+  statusEffects: parseJson(row.status_effects, []),
 });
 
 export default {
@@ -350,7 +352,7 @@ export default {
           const restored = maximum - current;
           if (restored <= 0) return json({ error: "health_already_full" }, 409);
           const results = await env.DB.batch([
-            env.DB.prepare("UPDATE players SET current_hp=?,world_resources=world_resources-1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND world_resources>=1 AND COALESCE(current_hp,?)<? AND EXISTS(SELECT 1 FROM world_player_presence WHERE player_id=? AND zone_id=?) AND NOT EXISTS(SELECT 1 FROM world_rest_log WHERE command_id=?)").bind(maximum, identity.subject, maximum, maximum, identity.subject, zoneId, body.commandId),
+            env.DB.prepare("UPDATE players SET current_hp=?,status_effects='[]',world_resources=world_resources-1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND world_resources>=1 AND COALESCE(current_hp,?)<? AND EXISTS(SELECT 1 FROM world_player_presence WHERE player_id=? AND zone_id=?) AND NOT EXISTS(SELECT 1 FROM world_rest_log WHERE command_id=?)").bind(maximum, identity.subject, maximum, maximum, identity.subject, zoneId, body.commandId),
             env.DB.prepare("INSERT INTO world_rest_log(command_id,player_id,zone_id,hp_restored,resources_spent) SELECT ?,?,?,?,1 WHERE changes()=1").bind(body.commandId, identity.subject, zoneId, restored),
           ]);
           if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
