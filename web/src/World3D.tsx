@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { cameraModeIndex, clampCameraZoom, normalizeCameraRotation, type CameraMode } from './camera';
 
 type Props = {
   player: { x: number; y: number };
@@ -6,6 +7,9 @@ type Props = {
   weather: string;
   cycle: string;
   enabled: boolean;
+  cameraMode?: CameraMode;
+  cameraRotation?: number;
+  zoom?: number;
 };
 
 type V3 = [number, number, number];
@@ -28,7 +32,7 @@ function addGround(out:number[]) {
   out.push(-8,0,-8,8,0,-8,8,0,8,-8,0,-8,8,0,8,-8,0,8);
 }
 
-export function World3D({ player, threat, weather, cycle, enabled }: Props) {
+export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1 }: Props) {
   const ref=useRef<HTMLCanvasElement>(null);
 
   useEffect(()=>{
@@ -43,11 +47,20 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       uniform float u_time;
       uniform float u_player_x;
       uniform float u_player_y;
+      uniform float u_camera_rotation;
+      uniform float u_camera_zoom;
+      uniform float u_camera_mode;
       varying vec3 v_position;
       void main(){
         vec3 p=a_position;
         p.x-=u_player_x;
         p.z-=u_player_y;
+        float cameraCos=cos(u_camera_rotation);
+        float cameraSin=sin(u_camera_rotation);
+        float rotatedX=p.x*cameraCos-p.z*cameraSin;
+        float rotatedZ=p.x*cameraSin+p.z*cameraCos;
+        float elevation=u_camera_mode<0.5?0.615:(u_camera_mode<1.5?0.30:0.82);
+        p=vec3(rotatedX*u_camera_zoom,p.y*cos(elevation)-rotatedZ*sin(elevation),p.y*sin(elevation)+rotatedZ*cos(elevation));
         float walk=sin(u_time*5.0+u_player_x*0.8+u_player_y*0.6);
         p.y+=sin(u_time*1.5+p.x*0.8+p.z*0.6)*0.012;
         // Subtle procedural walk/idle motion across the tactical scene.
@@ -146,6 +159,9 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
     const matrixLoc=gl.getUniformLocation(program,'u_matrix'),timeLoc=gl.getUniformLocation(program,'u_time');
     const pxLoc=gl.getUniformLocation(program,'u_player_x'),pyLoc=gl.getUniformLocation(program,'u_player_y');
     const threatLoc=gl.getUniformLocation(program,'u_threat'),weatherLoc=gl.getUniformLocation(program,'u_weather'),cycleLoc=gl.getUniformLocation(program,'u_cycle');
+    const cameraRotationLoc=gl.getUniformLocation(program,'u_camera_rotation');
+    const cameraZoomLoc=gl.getUniformLocation(program,'u_camera_zoom');
+    const cameraModeLoc=gl.getUniformLocation(program,'u_camera_mode');
 
     let raf=0;
     let lastWidth=0,lastHeight=0;
@@ -161,15 +177,17 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
       gl.clearColor(.01,.02,.05,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       const aspect=canvas.width/Math.max(1,canvas.height);
       const s=0.105/Math.max(.7,aspect);
-      const zoom=1.0+Math.min(0.35,Math.abs(player.x%6-player.y%5)*0.01);
-      // Camera remains player-centered while actor geometry receives shader-time motion.
-
+      const boundedZoom=clampCameraZoom(zoom);
+      // Orthographic projection after camera-space rotation and elevation in the vertex shader.
       const matrix=new Float32Array([
-        s*zoom,0,0,0, 0,s*1.35*zoom,0,0, 0,0,s*zoom,0,
+        s,0,0,0, 0,s*1.35,0,0, 0,0,s,0,
         0,-0.16,0,1
       ]);
       gl.uniformMatrix4fv(matrixLoc,false,matrix);
       gl.uniform1f(timeLoc,time/1000);gl.uniform1f(pxLoc,player.x%12);gl.uniform1f(pyLoc,player.y%12);
+      gl.uniform1f(cameraRotationLoc,normalizeCameraRotation(cameraRotation));
+      gl.uniform1f(cameraZoomLoc,boundedZoom);
+      gl.uniform1f(cameraModeLoc,cameraModeIndex(cameraMode));
       gl.uniform1f(threatLoc,threat);
       gl.uniform1f(weatherLoc,weather==='storm'?1:weather==='mist'?.5:weather==='frost'?.25:0);
       gl.uniform1f(cycleLoc,cycle==='night'?1:cycle==='dusk'?.6:cycle==='dawn'?.3:0);
@@ -181,7 +199,7 @@ export function World3D({ player, threat, weather, cycle, enabled }: Props) {
     };
     raf=requestAnimationFrame(draw);
     return()=>{cancelAnimationFrame(raf);gl.deleteBuffer(buffer);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs)};
-  },[enabled,player.x,player.y,threat,weather,cycle]);
+  },[enabled,player.x,player.y,threat,weather,cycle,cameraMode,cameraRotation,zoom]);
 
   return <canvas ref={ref} className="world-3d-canvas" aria-label="3D tactical world"/>;
 }
