@@ -64,10 +64,11 @@ function drawPixelPoi(ctx: CanvasRenderingContext2D, x: number, y: number, size:
   ctx.restore();
 }
 
-function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources, explorationCount, factionInfluence, worldEvent, worldEventAge, remotePlayers, onTileMove, onSignalSelect }: { zoneId: string; waypoint: {x:number;y:number}|null; worldTile: {x:number;y:number}; worldThreat: number; worldResources: number; explorationCount: number; factionInfluence: number; worldEvent: import('./world').WorldEvent; worldEventAge: number; remotePlayers: ZonePresence[]; onTileMove: (tileX: number, tileY: number) => void; onSignalSelect: (signal: {type:'poi'|'npc'|'event'; name:string; x:number; y:number}) => void }) {
+function WorldCanvas({ zoneId, waypoint, worldTile, playerFaction, playerAttacking, worldThreat, worldResources, explorationCount, factionInfluence, worldEvent, worldEventAge, remotePlayers, onTileMove, onSignalSelect }: { zoneId: string; waypoint: {x:number;y:number}|null; worldTile: {x:number;y:number}; playerFaction: CharacterFaction; playerAttacking: boolean; worldThreat: number; worldResources: number; explorationCount: number; factionInfluence: number; worldEvent: import('./world').WorldEvent; worldEventAge: number; remotePlayers: ZonePresence[]; onTileMove: (tileX: number, tileY: number) => void; onSignalSelect: (signal: {type:'poi'|'npc'|'event'; name:string; x:number; y:number}) => void }) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const dynamicRef = useRef<HTMLCanvasElement>(null);
   const position = useRef({ x: 0, y: 0 });
+  const playerVisual = useRef({ x: 0, y: 0, initialized: false });
   const remoteVisuals = useRef<Record<string, { x: number; y: number; trail: Array<{ x: number; y: number; age: number }> }>>({});
   const remotePlayersRef = useRef(remotePlayers);
   const pathCache = useRef<{ key: string; path: { x: number; y: number }[] }>({ key: '', path: [] });
@@ -81,9 +82,11 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
   }, [zoneId, worldThreat, worldResources, explorationCount]);
   useEffect(() => {
     position.current = { x: 0, y: 0 };
+    playerVisual.current = { x: 0, y: 0, initialized: false };
   }, [zoneId]);
   useEffect(() => {
     position.current = { x: worldTile.x, y: worldTile.y };
+    if (!playerVisual.current.initialized) playerVisual.current = { x: worldTile.x, y: worldTile.y, initialized: true };
   }, [worldTile.x, worldTile.y]);
   useEffect(() => {
     const canvas = baseRef.current;
@@ -95,8 +98,10 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
       const clickY = event.clientY - rect.top;
       const cols = Math.ceil(rect.width / tile);
       const rows = Math.ceil(rect.height / tile);
-      const cameraX = Math.max(0, Math.min(59 - cols, position.current.x - Math.floor(cols / 2)));
-      const cameraY = Math.max(0, Math.min(39 - rows, position.current.y - Math.floor(rows / 2)));
+      const visualCameraX = playerVisual.current.initialized ? playerVisual.current.x : position.current.x;
+      const visualCameraY = playerVisual.current.initialized ? playerVisual.current.y : position.current.y;
+      const cameraX = Math.max(0, Math.min(59 - cols, visualCameraX - Math.floor(cols / 2)));
+      const cameraY = Math.max(0, Math.min(39 - rows, visualCameraY - Math.floor(rows / 2)));
       const zone = getZone(zoneId);
       const npcs = getZoneNpcs(zone, worldThreat, worldResources, explorationCount);
       const eventPoint = getWorldEventPoint(worldEvent);
@@ -283,7 +288,12 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
       }
       const activeIds = new Set(currentRemotePlayers.map(remote => remote.playerId));
       Object.keys(remoteVisuals.current).forEach(id => { if (!activeIds.has(id)) delete remoteVisuals.current[id]; });
-      const smoothing = 1 - Math.exp(-10 * Math.min(50, Math.max(0, deltaMs)) / 1000);
+      const frameDelta = Math.min(50, Math.max(0, deltaMs));
+      const smoothing = 1 - Math.exp(-10 * frameDelta / 1000);
+      const localVisual = playerVisual.current;
+      if (!localVisual.initialized) { localVisual.x = position.current.x; localVisual.y = position.current.y; localVisual.initialized = true; }
+      localVisual.x += (position.current.x - localVisual.x) * smoothing;
+      localVisual.y += (position.current.y - localVisual.y) * smoothing;
       currentRemotePlayers.forEach(remote=>{
         const visual = remoteVisuals.current[remote.playerId] ?? (remoteVisuals.current[remote.playerId] = { x: remote.worldTile.x, y: remote.worldTile.y, trail: [] });
         const previousX = visual.x;
@@ -297,6 +307,13 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         const sx=(visual.x-cameraX)*tile+tile/2,sy=(visual.y-cameraY)*tile+tile/2;
         if(sx<-20||sy<-20||sx>rect.width+20||sy>rect.height+20)return;
         const remoteFactionColor = remote.faction === 'Aegis' ? '#8fa9e8' : remote.faction === 'Nomads' ? '#d8b56a' : remote.faction === 'Syndicate' ? '#ad8ee8' : '#8fbfda';
+        const remoteMoving = Math.hypot(remote.worldTile.x - visual.x, remote.worldTile.y - visual.y) > 0.035;
+        const remotePose: CharacterPose = remoteMoving ? 'walk' : 'idle';
+        const remoteClip = CHARACTER_ANIMATION_CLIPS[remotePose];
+        let remoteSeed = 0; for (let i=0;i<remote.playerId.length;i++) remoteSeed=(remoteSeed*31+remote.playerId.charCodeAt(i))>>>0;
+        const remoteFrame = fxTime.current / 1000 * remoteClip.fps + remoteSeed % remoteClip.duration;
+        const remoteMotion = evaluateAnimation(remoteClip, remoteFrame);
+        const remoteCharacterFaction: CharacterFaction = remote.faction === 'Aegis' ? 'Aegis' : remote.faction === 'Nomads' ? 'Nomads' : remote.faction === 'Eclipse' ? 'Eclipse' : 'Neutral';
         const remotePulse = 0.5 + 0.5 * Math.sin(fxTime.current / 360 + remote.playerId.length);
         dynamicCtx.save();
         for (let i = visual.trail.length - 1; i >= 0; i--) {
@@ -318,9 +335,14 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         dynamicCtx.arc(sx, sy, 10 + remotePulse * 4, 0, Math.PI * 2);
         dynamicCtx.stroke();
         dynamicCtx.globalAlpha = 1;
-        dynamicCtx.fillStyle=remoteFactionColor;dynamicCtx.beginPath();dynamicCtx.arc(sx,sy,7,0,Math.PI*2);dynamicCtx.fill();
         dynamicCtx.restore();
-        dynamicCtx.strokeStyle='rgba(255,255,255,.5)';dynamicCtx.lineWidth=1;dynamicCtx.stroke();
+        dynamicCtx.save();
+        dynamicCtx.translate(sx + remoteMotion.x, sy + remoteMotion.y);
+        dynamicCtx.rotate(remoteMotion.rotation * Math.PI / 180);
+        dynamicCtx.globalAlpha = remoteMotion.opacity;
+        dynamicCtx.scale(remoteMotion.scale, remoteMotion.scale);
+        drawCharacterSprite(dynamicCtx, 0, 0, 32, { faction: remoteCharacterFaction, hostile: remoteCharacterFaction === 'Eclipse', role: remoteCharacterFaction === 'Nomads' ? 'scout' : remoteCharacterFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: remotePose, frame: Math.floor(remoteFrame) });
+        dynamicCtx.restore();
         dynamicCtx.fillStyle='#dce7ff';dynamicCtx.font='600 9px Inter,sans-serif';dynamicCtx.fillText(remote.name+' · '+remote.faction,sx+9,sy+3);
       });
       const ambientPhase = fxTime.current / 1800;
@@ -335,7 +357,11 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
         dynamicCtx.fillRect(ax,ay,1.5,1.5);
       }
       dynamicCtx.globalAlpha=1;
-      const px=(position.current.x-cameraX)*tile+tile/2, py=(position.current.y-cameraY)*tile+tile/2;
+      const playerPose: CharacterPose = playerAttacking ? 'attack' : Math.hypot(position.current.x - playerVisual.current.x, position.current.y - playerVisual.current.y) > 0.035 ? 'walk' : 'idle';
+      const playerClip = CHARACTER_ANIMATION_CLIPS[playerPose];
+      const playerFrame = playerPose === 'attack' ? Math.min(playerClip.duration, (fxTime.current / 1000) * playerClip.fps % playerClip.duration) : (fxTime.current / 1000) * playerClip.fps;
+      const playerMotion = evaluateAnimation(playerClip, playerFrame);
+      const px=(playerVisual.current.x-cameraX)*tile+tile/2, py=(playerVisual.current.y-cameraY)*tile+tile/2;
       const pulse = 0.5 + 0.5 * Math.sin(fxTime.current / 260);
       dynamicCtx.save();
       dynamicCtx.globalAlpha = 0.22 + pulse * 0.12;
@@ -344,29 +370,18 @@ function WorldCanvas({ zoneId, waypoint, worldTile, worldThreat, worldResources,
       dynamicCtx.globalAlpha = 0.7;
       dynamicCtx.fillStyle = '#d8e5ff'; dynamicCtx.beginPath(); dynamicCtx.arc(px, py, 2 + pulse * 1.5, 0, Math.PI * 2); dynamicCtx.fill();
       dynamicCtx.restore();
-      // Petit sprite pixel-art 64×64 : le personnage reste lisible même sans sprites externes.
-      const bob = Math.round(Math.sin(fxTime.current / 150) * 2);
-      const sx = Math.round(px - tile * 0.20);
-      const sy = Math.round(py - tile * 0.30 + bob);
-      dynamicCtx.fillStyle = '#101827';
-      dynamicCtx.fillRect(sx + 7, sy + 10, 18, 27);
-      dynamicCtx.fillStyle = '#6b4329';
-      dynamicCtx.fillRect(sx + 10, sy + 2, 12, 12);
-      dynamicCtx.fillStyle = '#2f8de4';
-      dynamicCtx.fillRect(sx + 8, sy + 14, 16, 14);
-      dynamicCtx.fillStyle = '#dce7ff';
-      dynamicCtx.fillRect(sx + 12, sy + 5, 8, 6);
-      dynamicCtx.fillStyle = '#17375d';
-      dynamicCtx.fillRect(sx + 10, sy + 27, 5, 10);
-      dynamicCtx.fillRect(sx + 19, sy + 27, 5, 10);
-      dynamicCtx.fillStyle = '#f0c58a';
-      dynamicCtx.fillRect(sx + 4, sy + 16, 5, 10);
-      dynamicCtx.fillRect(sx + 24, sy + 16, 5, 10);
-      dynamicCtx.fillStyle = '#d8b56a';
-      dynamicCtx.fillRect(sx + 26, sy + 13, 3, 18);
+      dynamicCtx.save();
+      dynamicCtx.translate(px + playerMotion.x, py + playerMotion.y);
+      dynamicCtx.rotate(playerMotion.rotation * Math.PI / 180);
+      dynamicCtx.globalAlpha = playerMotion.opacity;
+      dynamicCtx.scale(playerMotion.scale, playerMotion.scale);
+      drawCharacterSprite(dynamicCtx, 0, 0, 40, { faction: playerFaction, hostile: false, role: playerFaction === 'Nomads' ? 'scout' : playerFaction === 'Eclipse' ? 'mystic' : 'vanguard', pose: playerPose, frame: Math.floor(playerFrame) });
+      dynamicCtx.restore();
       dynamicCtx.fillStyle = '#fff';
-      dynamicCtx.font='600 10px Inter,sans-serif';
-      dynamicCtx.fillText('PLAYER',px-22,py+34);
+      dynamicCtx.font = '600 10px Inter,sans-serif';
+      dynamicCtx.textAlign = 'center';
+      dynamicCtx.fillText('PLAYER', px, py + 31);
+      dynamicCtx.textAlign = 'start';
     };
     let frame = 0;
     let lastFrame = performance.now();
@@ -570,7 +585,7 @@ function App() {
 
   return <main className="shell"><header className="header"><div><span className="eyebrow">FREEDOMARENA × RPGQG CARDS</span><h1>Web Arena</h1></div><span className="status">RPGQG progression</span></header>
   <section className="hero"><div><span className="eyebrow">PLAYER</span><h2>{player.name}</h2><p>Level {player.level} · {player.xp} XP · {player.victories} victories · {player.arenaWins} arena wins · {player.fusionMaterials} fusion materials</p></div>{equipped&&<div className="equipped"><span className="eyebrow">EQUIPPED CARD</span><strong>{equipped.name}</strong><span>{equipped.rarity} · Lv {equipped.level}</span>{lastCardXp>0&&<small>+{lastCardXp} card XP on last victory</small>}</div>}</section>
-  <section className="panel"><div><span className="eyebrow">WORLD / EXPLORATION</span><h2>{currentZone.name}</h2><p>{currentZone.description}</p><div className="world-layout"><div className="world-map"><WorldCanvas zoneId={player.zoneId} waypoint={waypoint} worldTile={worldTile} worldThreat={player.worldThreat} worldResources={player.worldResources} explorationCount={player.explorationCount} factionInfluence={activeFactionInfluence} worldEvent={worldEvent} worldEventAge={worldEventAge} remotePlayers={remotePlayers} onSignalSelect={setSelectedSignal} onTileMove={(x,y)=>{const next=moveTile(worldTile,{x,y});setWorldTile(next);update({...player,worldTile:next});setWorldMessage(next.x===x&&next.y===y?`Moved to tile ${x}, ${y}.`:`Blocked path: ${getTile(x,y).kind} tile.`)}} />{zones.map(zone=><button key={zone.id} className={zone.id===player.zoneId?'zone-node active':'zone-node'} disabled={getZoneStatus(player.level,zone,player.zoneId)==='locked'} onClick={()=>moveTo(zone.id)}><strong>{zone.name}</strong><span>Lv {zone.level} · {zone.faction}</span></button>)}</div><div className="zone-info"><p><strong>Tile:</strong> {worldTile.x}, {worldTile.y} · <strong>World:</strong> {worldMessage}</p>{waypoint&&<p><strong>Waypoint:</strong> {waypoint.x}, {waypoint.y} · <strong>Path:</strong> {pathLength} steps</p>}{nearestPoi&&<p><strong>Nearest POI:</strong> {nearestPoi.name} · distance {nearestPoi.distance}</p>}{selectedSignal&&<p><strong>Signal:</strong> {selectedSignal.name} · {selectedSignal.type.toUpperCase()} · {selectedSignal.x}, {selectedSignal.y}</p>}{nearestNpc.npc&&<p><strong>Nearest faction NPC:</strong> {nearestNpc.npc.name} · {nearestNpc.npc.activity} · distance {nearestNpc.distance}{getNpcMemory(nearestNpc.npc.id)&&<> · Trust {getNpcMemory(nearestNpc.npc.id)!.trust} · {getNpcMemory(nearestNpc.npc.id)!.affinity}</>}</p>}{selectedSignal&&<div className="signal-actions"><button type="button" onClick={()=>{setWaypoint({x:selectedSignal.x,y:selectedSignal.y});setAutoMove(true);setWorldMessage('Waypoint set: '+selectedSignal.name);}}>Navigate to signal</button>{selectedSignal.type==='npc'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>2} onClick={()=>{const npc=zoneNpcs.find(n=>n.x===selectedSignal.x&&n.y===selectedSignal.y);if(!npc)return;const result=interactWithNpc(npc,player.worldThreat,player.worldResources);const next=applyNpcInteraction(player,npc.faction as Faction,result.action,npc.id);update(next);setWorldMessage(result.message);setSelectedSignal(null);}}>{Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)<=2?'Resolve NPC action':'Move closer'}</button>}{selectedSignal.type==='event'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const next=applyWorldEventState(player,worldEvent.effect,worldEvent.intensity,worldEvent.faction);update(next);setWorldEvent(generateWorldEvent(currentZone,next.worldThreat,next.worldResources,next.explorationCount,activeFactionInfluence));setWorldMessage('World event resolved: '+worldEvent.title);setWorldEventAge(0);setWaypoint(null);setAutoMove(false);setSelectedSignal(null);}}>Resolve event</button>}{selectedSignal.type==='poi'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const poiIndex=currentZone.pointsOfInterest.findIndex(name=>name===selectedSignal.name);if(poiIndex<0)return;const interaction=interactWithPoi(currentZone,poiIndex);if(!interaction)return;const modifiers=getZoneDynamicModifiers(currentZone,player.worldThreat,player.worldResources,player.factionStates.find(f=>f.faction===player.faction)?.influence??100);const next=applyPoiReward(player,interaction.action,{resourceYield:modifiers.resourceYield,encounterChance:modifiers.encounterChance},currentZone.id+':'+poiIndex);update(next);setPoiMessage('POI resolved: '+interaction.name);setPoiAction(interaction.action);setSelectedSignal(null);setWorldMessage('POI action resolved: '+interaction.action);}}>{worldTile.x===selectedSignal.x&&worldTile.y===selectedSignal.y?'Resolve POI action':'Move to POI'}</button>}</div>}{nearestNpc.npc&&<button type="button" disabled={nearestNpc.distance>2} onClick={()=>{const result=interactWithNpc(nearestNpc.npc,player.worldThreat,player.worldResources);update(applyNpcInteraction(player,nearestNpc.npc.faction as Faction,result.action,nearestNpc.npc.id));setWorldMessage(result.message);}}>{nearestNpc.distance<=2?'Interact with NPC':'Move closer to interact'}</button>}{poiMessage&&<p><strong>Discovery:</strong> {poiMessage} · <strong>Action:</strong> {poiAction}</p>}<p><strong>Faction:</strong> {currentZone.faction} · <strong>Required level:</strong> {currentZone.level}</p><p><strong>Points of interest:</strong> {currentZone.pointsOfInterest.join(' · ')}</p><div className="actions"><button onClick={doExplore}>Explore this zone</button><button onClick={startCombat} disabled={combat?.status==='active'}>Enter combat</button></div>{player.lastDiscovery&&<p><strong>Latest discovery:</strong> {player.lastDiscovery}</p>}</div></div></div></section>
+  <section className="panel"><div><span className="eyebrow">WORLD / EXPLORATION</span><h2>{currentZone.name}</h2><p>{currentZone.description}</p><div className="world-layout"><div className="world-map"><WorldCanvas zoneId={player.zoneId} waypoint={waypoint} worldTile={worldTile} playerFaction={player.faction === 'Aegis' ? 'Aegis' : player.faction === 'Nomads' ? 'Nomads' : player.faction === 'Eclipse' ? 'Eclipse' : 'Neutral'} playerAttacking={combat?.status === 'active' && combat.turn === 'player'} worldThreat={player.worldThreat} worldResources={player.worldResources} explorationCount={player.explorationCount} factionInfluence={activeFactionInfluence} worldEvent={worldEvent} worldEventAge={worldEventAge} remotePlayers={remotePlayers} onSignalSelect={setSelectedSignal} onTileMove={(x,y)=>{const next=moveTile(worldTile,{x,y});setWorldTile(next);update({...player,worldTile:next});setWorldMessage(next.x===x&&next.y===y?`Moved to tile ${x}, ${y}.`:`Blocked path: ${getTile(x,y).kind} tile.`)}} />{zones.map(zone=><button key={zone.id} className={zone.id===player.zoneId?'zone-node active':'zone-node'} disabled={getZoneStatus(player.level,zone,player.zoneId)==='locked'} onClick={()=>moveTo(zone.id)}><strong>{zone.name}</strong><span>Lv {zone.level} · {zone.faction}</span></button>)}</div><div className="zone-info"><p><strong>Tile:</strong> {worldTile.x}, {worldTile.y} · <strong>World:</strong> {worldMessage}</p>{waypoint&&<p><strong>Waypoint:</strong> {waypoint.x}, {waypoint.y} · <strong>Path:</strong> {pathLength} steps</p>}{nearestPoi&&<p><strong>Nearest POI:</strong> {nearestPoi.name} · distance {nearestPoi.distance}</p>}{selectedSignal&&<p><strong>Signal:</strong> {selectedSignal.name} · {selectedSignal.type.toUpperCase()} · {selectedSignal.x}, {selectedSignal.y}</p>}{nearestNpc.npc&&<p><strong>Nearest faction NPC:</strong> {nearestNpc.npc.name} · {nearestNpc.npc.activity} · distance {nearestNpc.distance}{getNpcMemory(nearestNpc.npc.id)&&<> · Trust {getNpcMemory(nearestNpc.npc.id)!.trust} · {getNpcMemory(nearestNpc.npc.id)!.affinity}</>}</p>}{selectedSignal&&<div className="signal-actions"><button type="button" onClick={()=>{setWaypoint({x:selectedSignal.x,y:selectedSignal.y});setAutoMove(true);setWorldMessage('Waypoint set: '+selectedSignal.name);}}>Navigate to signal</button>{selectedSignal.type==='npc'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>2} onClick={()=>{const npc=zoneNpcs.find(n=>n.x===selectedSignal.x&&n.y===selectedSignal.y);if(!npc)return;const result=interactWithNpc(npc,player.worldThreat,player.worldResources);const next=applyNpcInteraction(player,npc.faction as Faction,result.action,npc.id);update(next);setWorldMessage(result.message);setSelectedSignal(null);}}>{Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)<=2?'Resolve NPC action':'Move closer'}</button>}{selectedSignal.type==='event'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const next=applyWorldEventState(player,worldEvent.effect,worldEvent.intensity,worldEvent.faction);update(next);setWorldEvent(generateWorldEvent(currentZone,next.worldThreat,next.worldResources,next.explorationCount,activeFactionInfluence));setWorldMessage('World event resolved: '+worldEvent.title);setWorldEventAge(0);setWaypoint(null);setAutoMove(false);setSelectedSignal(null);}}>Resolve event</button>}{selectedSignal.type==='poi'&&<button type="button" disabled={Math.abs(selectedSignal.x-worldTile.x)+Math.abs(selectedSignal.y-worldTile.y)>0} onClick={()=>{const poiIndex=currentZone.pointsOfInterest.findIndex(name=>name===selectedSignal.name);if(poiIndex<0)return;const interaction=interactWithPoi(currentZone,poiIndex);if(!interaction)return;const modifiers=getZoneDynamicModifiers(currentZone,player.worldThreat,player.worldResources,player.factionStates.find(f=>f.faction===player.faction)?.influence??100);const next=applyPoiReward(player,interaction.action,{resourceYield:modifiers.resourceYield,encounterChance:modifiers.encounterChance},currentZone.id+':'+poiIndex);update(next);setPoiMessage('POI resolved: '+interaction.name);setPoiAction(interaction.action);setSelectedSignal(null);setWorldMessage('POI action resolved: '+interaction.action);}}>{worldTile.x===selectedSignal.x&&worldTile.y===selectedSignal.y?'Resolve POI action':'Move to POI'}</button>}</div>}{nearestNpc.npc&&<button type="button" disabled={nearestNpc.distance>2} onClick={()=>{const result=interactWithNpc(nearestNpc.npc,player.worldThreat,player.worldResources);update(applyNpcInteraction(player,nearestNpc.npc.faction as Faction,result.action,nearestNpc.npc.id));setWorldMessage(result.message);}}>{nearestNpc.distance<=2?'Interact with NPC':'Move closer to interact'}</button>}{poiMessage&&<p><strong>Discovery:</strong> {poiMessage} · <strong>Action:</strong> {poiAction}</p>}<p><strong>Faction:</strong> {currentZone.faction} · <strong>Required level:</strong> {currentZone.level}</p><p><strong>Points of interest:</strong> {currentZone.pointsOfInterest.join(' · ')}</p><div className="actions"><button onClick={doExplore}>Explore this zone</button><button onClick={startCombat} disabled={combat?.status==='active'}>Enter combat</button></div>{player.lastDiscovery&&<p><strong>Latest discovery:</strong> {player.lastDiscovery}</p>}</div></div></div></section>
   <GraphicsStudio />
   <CharacterStudio />
   <TerrainEditor />
