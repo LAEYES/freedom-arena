@@ -2,12 +2,31 @@ export type CharacterFaction = 'Aegis' | 'Nomads' | 'Eclipse' | 'Neutral';
 export type CharacterPose = 'idle' | 'walk' | 'attack';
 export type CharacterRole = 'vanguard' | 'scout' | 'mystic';
 export type CharacterEquipmentSlot = 'weapon' | 'head' | 'chest' | 'accessory';
-export interface CharacterEquipmentVisual { tier: 1 | 2 | 3; accent: string; }
+export type CharacterEquipmentMaterial = 'alloy' | 'crystal' | 'obsidian';
+export interface CharacterEquipmentVisual {
+  tier: 1 | 2 | 3;
+  accent: string;
+  highlight: string;
+  shadow: string;
+  material: CharacterEquipmentMaterial;
+}
 export function getCharacterEquipmentVisual(rarity: 'Common' | 'Rare' | 'Epic' | 'Legendary' | string, slot: CharacterEquipmentSlot): CharacterEquipmentVisual | undefined {
   if (!rarity || rarity === 'Common') return undefined;
   const tier = rarity === 'Legendary' ? 3 : rarity === 'Epic' ? 2 : 1;
-  const accent = rarity === 'Legendary' ? '#f4c96b' : rarity === 'Epic' ? '#c49be7' : '#75c9dc';
-  return { tier, accent };
+  const material: CharacterEquipmentMaterial = tier === 3 ? 'obsidian' : tier === 2 ? 'crystal' : 'alloy';
+  const accent = tier === 3 ? '#f4c96b' : tier === 2 ? '#c49be7' : '#75c9dc';
+  const highlight = tier === 3 ? '#fff0bd' : tier === 2 ? '#f0ddff' : '#e0f8ff';
+  const shadow = tier === 3 ? '#73552b' : tier === 2 ? '#59436f' : '#315866';
+  return { tier, accent, highlight, shadow, material };
+}
+export interface EquipmentMotion { rotation: number; bob: number; pulse: number; }
+export function getEquipmentMotion(slot: CharacterEquipmentSlot, pose: CharacterPose, frame: number, tier: 1 | 2 | 3): EquipmentMotion {
+  const phase = ((Math.floor(frame) % 8) + 8) % 8;
+  const wave = Math.sin((phase / 8) * Math.PI * 2);
+  if (slot === 'weapon') return { rotation: pose === 'attack' ? -0.75 + (phase % 4) * 0.42 : wave * 0.035, bob: 0, pulse: 0.35 + Math.abs(wave) * 0.25 };
+  if (slot === 'head') return { rotation: 0, bob: pose === 'walk' ? Math.abs(wave) * 0.65 : wave * 0.18, pulse: 0.25 + Math.abs(wave) * 0.15 };
+  if (slot === 'chest') return { rotation: 0, bob: 0, pulse: 0.35 + (0.5 + 0.5 * wave) * 0.35 };
+  return { rotation: wave * (0.08 + tier * 0.025), bob: wave * 0.45, pulse: 0.3 + (0.5 + 0.5 * wave) * 0.45 };
 }
 export type CharacterEquipmentLoadout = Partial<Record<CharacterEquipmentSlot, CharacterEquipmentVisual>>;
 export interface CharacterSpriteOptions {
@@ -106,8 +125,8 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   rect(dark,-5,3,10,2);
   // Equipment slots are independent visual overlays; all remain cosmetic.
   const gear = options.equipment;
-  if (gear?.chest) { rect(gear.chest.accent,-4,-5,2,6); rect(gear.chest.accent,2,-5,2,6); if(gear.chest.tier>=2)rect(gear.chest.accent,-2,-1,4,2); }
-  if (gear?.accessory) { rect(gear.accessory.accent,-7,-1,2,3); if(gear.accessory.tier>=2)rect(gear.accessory.accent,5,-1,2,3); if(gear.accessory.tier>=3){ctx.save();ctx.globalAlpha=.7;ctx.strokeStyle=gear.accessory.accent;ctx.lineWidth=unit;ctx.beginPath();ctx.arc(centerX,centerY,10*unit,Math.PI*.15,Math.PI*.85);ctx.stroke();ctx.restore();} }
+  if (gear?.chest) { const motion=getEquipmentMotion('chest',options.pose,options.frame,gear.chest.tier);ctx.save();ctx.globalAlpha=0.65+motion.pulse*0.5;rect(gear.chest.shadow,-4,-5,2,6);rect(gear.chest.accent,-3,-5,1,6);rect(gear.chest.shadow,2,-5,2,6);rect(gear.chest.highlight,2,-5,1,5);if(gear.chest.material!=='alloy')rect(gear.chest.highlight,-1,-1,2,2);if(gear.chest.tier>=2)rect(gear.chest.accent,-2,-1,4,2);ctx.restore(); }
+  if (gear?.accessory) { const motion=getEquipmentMotion('accessory',options.pose,options.frame,gear.accessory.tier);ctx.save();ctx.translate(centerX,centerY);ctx.rotate(motion.rotation);ctx.globalAlpha=0.45+motion.pulse*0.65;ctx.fillStyle=gear.accessory.accent;ctx.fillRect(-8*unit,(-1+motion.bob)*unit,2*unit,3*unit);if(gear.accessory.tier>=2)ctx.fillRect(6*unit,(-1-motion.bob)*unit,2*unit,3*unit);if(gear.accessory.tier>=3){ctx.strokeStyle=gear.accessory.highlight;ctx.lineWidth=unit;ctx.beginPath();ctx.arc(0,0,10*unit,Math.PI*.15,Math.PI*.85);ctx.stroke();}ctx.restore(); }
   // Modular armor detail layer: faction trim, belt clasp and chest insignia.
   const layers = getCharacterLayerProfile(options.faction, options.role);
   rect(layers.armorTrim,-4,2,8,1);
@@ -121,7 +140,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   rect(dark,-4,-12,8,3);
   rect(armor,-4,-13,8,2);
   rect(palette.glow,-2,-9,4,1);
-  if (gear?.head) { rect(dark,-5,-13,10,2); rect(gear.head.accent,-5,-14,10,2); if(gear.head.tier>=2){rect(gear.head.accent,-6,-12,2,4);rect(gear.head.accent,4,-12,2,4);} if(gear.head.tier>=3)rect(gear.head.accent,-2,-16,4,2); }
+  if (gear?.head) { const motion=getEquipmentMotion('head',options.pose,options.frame,gear.head.tier);ctx.save();ctx.globalAlpha=0.85+motion.pulse*0.2;rect(gear.head.shadow,-5,-13+motion.bob,10,2);rect(gear.head.accent,-5,-14+motion.bob,10,2);rect(gear.head.highlight,-4,-14+motion.bob,8,1);if(gear.head.material==='crystal'){rect(gear.head.highlight,-1,-16+motion.bob,2,2);}if(gear.head.tier>=2){rect(gear.head.accent,-6,-12+motion.bob,2,4);rect(gear.head.accent,4,-12+motion.bob,2,4);}if(gear.head.tier>=3)rect(gear.head.highlight,-2,-17+motion.bob,4,2);ctx.restore(); }
   if(options.role==='scout'){rect(light,-6,-12,2,2);rect(light,4,-12,2,2);}
   if(options.role==='mystic'){rect(palette.glow,-1,-15,2,2);rect(light,-5,-4,2,2);rect(light,3,-4,2,2);}
   // Weapon silhouette and pose-dependent swing.
@@ -135,7 +154,7 @@ export function drawCharacterSprite(ctx: CanvasRenderingContext2D, x: number, y:
   if(layers.weapon==='staff'){ctx.fillStyle=palette.light;ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);}
   ctx.fillStyle=dark;ctx.fillRect(-3*unit,2*unit,6*unit,unit);
   ctx.restore();
-  if (gear?.weapon) { ctx.save();ctx.translate(centerX+6*unit,centerY-7*unit);ctx.rotate(options.pose==='attack'?-0.75+(options.frame%4)*.42:-0.12);ctx.fillStyle=gear.weapon.accent;ctx.fillRect(-unit,-2*unit,2*unit,(10+gear.weapon.tier*2)*unit);if(gear.weapon.tier>=2)ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);ctx.restore(); }
+  if (gear?.weapon) { const motion=getEquipmentMotion('weapon',options.pose,options.frame,gear.weapon.tier);ctx.save();ctx.translate(centerX+6*unit,centerY-7*unit);ctx.rotate(motion.rotation);ctx.fillStyle=gear.weapon.shadow;ctx.fillRect(-unit,-2*unit,2*unit,(10+gear.weapon.tier*2)*unit);ctx.fillStyle=gear.weapon.accent;ctx.fillRect(0,-2*unit,unit,(10+gear.weapon.tier*2)*unit);ctx.fillStyle=gear.weapon.highlight;ctx.fillRect(-unit,-2*unit,unit,2*unit);if(gear.weapon.material!=='alloy'){ctx.fillRect(-2*unit,-3*unit,4*unit,2*unit);}ctx.restore(); }
   if(options.role==='vanguard'){rect(light,-6,-1,2,4);rect(light,4,-1,2,4);}
   ctx.restore();
 }
