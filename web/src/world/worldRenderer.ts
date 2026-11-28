@@ -343,31 +343,40 @@ export function buildVegetationMesh(
   return new Float32Array(output);
 }
 
-/** Deterministic, biome-aware decorative geometry for a sector. */
-export function buildWorldDressingMesh(tiles: readonly TerrainTile[], seed: number): Float32Array {
+export type WorldDressingLod = 'high' | 'medium' | 'low';
+
+/** Deterministic, biome-aware chunk decoration with distance-scaled density and geometry. */
+export function buildWorldDressingMesh(
+  tiles: readonly TerrainTile[],
+  seed: number,
+  options: { lod?: WorldDressingLod } = {},
+): Float32Array {
   const output: number[] = [];
+  const lod = options.lod ?? 'high';
+  const densityScale = lod === 'high' ? 1 : lod === 'medium' ? 0.58 : 0.24;
   for (const tile of tiles) {
     const density = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-density');
     const variantSample = worldPlacementSample(seed, tile.i, tile.j, 'world-dressing-variant');
     let variant: VegetationVariant | null = null;
-    if (tile.kind === 'forest' && density < 0.34) {
+    if (tile.kind === 'forest' && density < 0.34 * densityScale) {
       variant = variantSample < 0.64 ? 'broadleaf' : 'conifer';
-    } else if (tile.kind === 'grass' && density < 0.075) {
+    } else if (tile.kind === 'grass' && density < 0.075 * densityScale) {
       variant = variantSample < 0.72 ? 'shrub' : 'broadleaf';
-    } else if (tile.kind === 'snow' && density < 0.055) {
+    } else if (tile.kind === 'snow' && density < 0.055 * densityScale) {
       variant = 'conifer';
-    } else if (tile.kind === 'sand' && density < 0.025) {
+    } else if (tile.kind === 'sand' && density < 0.025 * densityScale) {
       variant = 'shrub';
     }
 
     if (variant) {
-      const mesh = buildVegetationMesh(tile, variant, seed);
+      const simplifiedVariant = lod === 'low' ? 'shrub' : variant;
+      const mesh = buildVegetationMesh(tile, simplifiedVariant, seed);
       for (const value of mesh) output.push(value);
-    } else if (tile.kind === 'rock' && density < 0.12) {
+    } else if (tile.kind === 'rock' && density < 0.12 * densityScale) {
       const x = tile.i + 0.5;
       const y = tile.j + 0.5;
       const z = terrainWorldHeight(tile) + 0.04;
-      const scale = 0.65 + variantSample * 0.5;
+      const scale = (0.65 + variantSample * 0.5) * (lod === 'low' ? 0.72 : 1);
       pushPyramid(output, { x, y, z }, 0.25 * scale, z, 0.42 * scale, [0.47, 0.49, 0.51]);
     }
   }
