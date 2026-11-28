@@ -494,7 +494,17 @@ export function World3DCanvas({
                   .map(assignment => [assignment.id, assignment.role]));
                 const formationMembers = groupMembers.map(member => ({ ...member, role: dynamicRoles.get(member.id) ?? member.role }));
                 const formationPlans = planNpcFormation(terrainMap, squadLeader.position, leaderAgent.facing, formationMembers, occupied);
-                for (const plan of formationPlans) npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+                for (const plan of formationPlans) {
+                  const member = groupMembers.find(candidate => candidate.id === plan.id);
+                  let selectedPlan = plan;
+                  if (plan.role === 'GUARD' && member) {
+                    const coverBlocked = new Set(occupied);
+                    coverBlocked.delete(tileKey(member.position.i, member.position.j));
+                    const coverRoute = planNpcDirectionalCoverRoute(terrainMap, member.position, playerTile, 8, coverBlocked);
+                    if (coverRoute) selectedPlan = { ...plan, slot: coverRoute.position, path: coverRoute.path };
+                  }
+                  npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(selectedPlan, 460));
+                }
                 for (const memberId of memberIds) npcSquadMembershipRef.current.set(memberId, squadLeader.id);
                 squadFormationStatesRef.current.set(squadLeader.id, {
                   leaderId: squadLeader.id, anchor: { i: squadLeader.position.i, j: squadLeader.position.j },
@@ -538,7 +548,17 @@ export function World3DCanvas({
                     path: [member.position], pathIndex: 0, stepElapsedMs: 0, targetKey: null,
                   };
                 }
-                for (const plan of plans) npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(plan, 460));
+                for (const plan of plans) {
+                  const member = members.find(candidate => candidate.actor.id === plan.id);
+                  let selectedPlan = plan;
+                  if (plan.role === 'GUARD' && member) {
+                    const coverBlocked = new Set(occupied);
+                    coverBlocked.delete(tileKey(member.position.i, member.position.j));
+                    const coverRoute = planNpcDirectionalCoverRoute(terrainMap, member.position, playerTile, 8, coverBlocked);
+                    if (coverRoute) selectedPlan = { ...plan, slot: coverRoute.position, path: coverRoute.path };
+                  }
+                  npcFormationMotionsRef.current.set(plan.id, createNpcFormationMotion(selectedPlan, 460));
+                }
                 squadState.anchor = formationAnchor({ x: leaderTile.i, y: leaderTile.j });
                 squadState.elapsedMs = 0;
               }
