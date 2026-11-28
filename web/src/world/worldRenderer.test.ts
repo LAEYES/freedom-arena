@@ -12,6 +12,9 @@ import {
   buildVegetationMesh,
   buildWorldDressingMesh,
   buildLandmarkMesh,
+  buildTerrainCliffMesh,
+  buildRoadMesh,
+  buildBridgeMesh,
   pickNearestTerrainTile,
   TERRAIN_PALETTE,
   terrainWorldHeight,
@@ -167,6 +170,45 @@ describe('WebGL world mesh and picking', () => {
     }
     expect(Array.from(buildLandmarkMesh(grass, 'watchtower')))
       .toEqual(Array.from(buildLandmarkMesh(grass, 'watchtower')));
+  });
+
+  it('builds road strips only on contiguous walkable cardinal routes', () => {
+    const routeTiles = [
+      { ...grass, i: 0, j: 0 },
+      { ...grass, i: 1, j: 0 },
+      { ...grass, i: 1, j: 1 },
+    ];
+    const route = routeTiles.map(({ i, j }) => ({ i, j }));
+    const road = buildRoadMesh(routeTiles, route);
+    expect(road.length).toBeGreaterThan(0);
+    expect(road.every(Number.isFinite)).toBe(true);
+    expect(buildRoadMesh(
+      [{ ...routeTiles[0], walkable: false }],
+      [{ i: 0, j: 0 }],
+    ).length).toBe(0);
+    expect(buildRoadMesh(routeTiles, [{ i: 0, j: 0 }, { i: 2, j: 0 }]).length)
+      .toBeGreaterThan(0); // isolated route nodes render, but no false connecting segment
+  });
+
+  it('builds cliff faces only at exposed elevation differences', () => {
+    const high = { ...grass, i: 0, j: 0, elevation: 4 };
+    const low = { ...grass, i: 1, j: 0, elevation: 1 };
+    const cliff = buildTerrainCliffMesh([high, low]);
+    expect(cliff.length).toBe(36);
+    expect(cliff.every(Number.isFinite)).toBe(true);
+    expect(buildTerrainCliffMesh([{ ...high, elevation: 1 }, { ...low, elevation: 1 }]).length)
+      .toBe(0);
+  });
+
+  it('builds a bridge only across a single aligned water tile between walkable banks', () => {
+    const bankA = { ...grass, i: 0, j: 0 };
+    const water = { ...grass, i: 1, j: 0, kind: 'water' as const, walkable: false, movementCost: Infinity };
+    const bankB = { ...grass, i: 2, j: 0 };
+    const bridge = buildBridgeMesh(bankA, water, bankB);
+    expect(bridge.length).toBeGreaterThan(0);
+    expect(bridge.every(Number.isFinite)).toBe(true);
+    expect(buildBridgeMesh(bankA, { ...water, i: 1, j: 1 }, bankB).length).toBe(0);
+    expect(buildBridgeMesh(bankA, water, { ...bankB, walkable: false }).length).toBe(0);
   });
 
   it('picks the nearest projected terrain tile', () => {
