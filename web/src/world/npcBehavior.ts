@@ -10,6 +10,7 @@ export type NpcBehaviorConfig = {
   disengageRadius?: number;
   maxChaseTiles?: number;
   stepDurationMs?: number;
+  alertHoldMs?: number;
   blockedTiles?: ReadonlySet<string>;
 };
 export type NpcBehaviorAgent = {
@@ -56,6 +57,7 @@ export function updateNpcBehavior(
   const disengageRadius = Math.max(alertRadius, config.disengageRadius ?? 10);
   const maxChaseTiles = Math.max(1, config.maxChaseTiles ?? 12);
   const stepDurationMs = Math.max(100, config.stepDurationMs ?? agent.stepDurationMs ?? 420);
+  const alertHoldMs = Math.max(0, config.alertHoldMs ?? 1800);
   const range = distance(agent.position, player);
 
   let state = agent.state;
@@ -63,7 +65,8 @@ export function updateNpcBehavior(
   if (state === 'PATROL' && range <= alertRadius
     && canNpcPerceivePlayer(map, agent.position, agent.facing, player, { radius: alertRadius, halfAngleDegrees: 60 })) state = 'ALERT';
   else if (state === 'ALERT' && range <= chaseRadius) state = 'CHASE';
-  else if (state === 'ALERT' && range > alertRadius) state = 'PATROL';
+  else if (state === 'ALERT' && range > alertRadius
+    && agent.stateElapsedMs + safeDelta >= alertHoldMs) state = 'PATROL';
   else if (state === 'CHASE' && (range > disengageRadius || distance(agent.home, player) > maxChaseTiles)) state = 'RETURN';
   else if (state === 'RETURN' && distance(agent.position, agent.home) === 0) state = 'PATROL';
 
