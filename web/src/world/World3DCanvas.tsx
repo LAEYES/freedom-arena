@@ -661,7 +661,7 @@ export function World3DCanvas({
             chunk.originI + chunk.width / 2 - reference.i,
             chunk.originJ + chunk.height / 2 - reference.j,
           );
-          const lod = selectWorldLod(distance);
+          const lod = selectWorldLod(distance, adaptiveLodQuality(graphicsQualityRef.current, p95FrameMs));
           const instances = vegetationChunkInstances.get(chunk.key)?.[lod];
           if (instances?.length) {
             vegetationParts.push(instances);
