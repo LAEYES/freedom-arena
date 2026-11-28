@@ -1,6 +1,7 @@
 import { findTerrainPath, isTileBlocked, tileKey } from './navigation';
 import type { TileCoordinate } from './coordinates';
 import type { TerrainMap } from './terrain';
+import { canNpcPerceivePlayer } from './npcPerception';
 
 export type NpcBehaviorState = 'IDLE' | 'PATROL' | 'ALERT' | 'CHASE' | 'RETURN';
 export type NpcBehaviorConfig = {
@@ -16,6 +17,7 @@ export type NpcBehaviorAgent = {
   home: TileCoordinate;
   position: TileCoordinate;
   previousPosition: TileCoordinate;
+  facing: { i: number; j: number };
   state: NpcBehaviorState;
   path: TileCoordinate[];
   pathIndex: number;
@@ -34,7 +36,7 @@ const key = (tile: TileCoordinate) => tileKey(tile.i, tile.j);
 export function createNpcBehaviorAgent(id: string, home: TileCoordinate): NpcBehaviorAgent {
   const spawn = { ...home };
   return {
-    id, home: spawn, position: { ...spawn }, previousPosition: { ...spawn },
+    id, home: spawn, position: { ...spawn }, previousPosition: { ...spawn }, facing: { i: 1, j: 0 },
     state: 'PATROL', path: [spawn], pathIndex: 0, targetKey: null,
     stateElapsedMs: 0, stepElapsedMs: 0, stepDurationMs: 420,
   };
@@ -58,7 +60,8 @@ export function updateNpcBehavior(
 
   let state = agent.state;
   if (state === 'IDLE') state = 'PATROL';
-  if (state === 'PATROL' && range <= alertRadius) state = 'ALERT';
+  if (state === 'PATROL' && range <= alertRadius
+    && canNpcPerceivePlayer(map, agent.position, agent.facing, player, { radius: alertRadius, halfAngleDegrees: 60 })) state = 'ALERT';
   else if (state === 'ALERT' && range <= chaseRadius) state = 'CHASE';
   else if (state === 'ALERT' && range > alertRadius) state = 'PATROL';
   else if (state === 'CHASE' && (range > disengageRadius || distance(agent.home, player) > maxChaseTiles)) state = 'RETURN';
@@ -125,11 +128,13 @@ export function updateNpcBehavior(
 
   let position = agent.position;
   let previousPosition = agent.previousPosition;
+  let facing = agent.facing;
   let stepElapsedMs = agent.stepElapsedMs + safeDelta;
   if ((state === 'CHASE' || state === 'RETURN') && path.length > 1 && pathIndex < path.length - 1 && stepElapsedMs >= stepDurationMs) {
     const next = path[pathIndex + 1];
     if (!isTileBlocked(map, next.i, next.j, blockedTiles)) {
       previousPosition = position;
+      facing = { i: next.i - position.i, j: next.j - position.j };
       position = { i: next.i, j: next.j, elevation: next.elevation };
       pathIndex += 1;
     } else {
@@ -147,7 +152,7 @@ export function updateNpcBehavior(
   }
 
   return {
-    ...agent, position, previousPosition, state, path, pathIndex,
+    ...agent, position, previousPosition, facing, state, path, pathIndex,
     targetKey: nextTargetKey,
     stateElapsedMs: state === agent.state ? agent.stateElapsedMs + safeDelta : 0,
     stepElapsedMs, stepDurationMs,
