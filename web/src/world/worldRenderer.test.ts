@@ -4,6 +4,7 @@ import {
   buildAvatarMesh,
   buildTerrainMesh,
   buildNpcMesh,
+  npcAnimationPhase,
   buildPoiBuildingMesh,
   buildEventBeaconMesh,
   buildBossMesh,
@@ -83,6 +84,28 @@ describe('WebGL world mesh and picking', () => {
     expect(poi.length).toBe(4 * 36 * 6);
     expect(npc.every(Number.isFinite)).toBe(true);
     expect(poi.every(Number.isFinite)).toBe(true);
+  });
+
+
+  it('assigns stable, distinct NPC animation phases from actor identity', () => {
+    const first = npcAnimationPhase('outpost:npc:0');
+    const same = npcAnimationPhase('outpost:npc:0');
+    const other = npcAnimationPhase('outpost:npc:1');
+    expect(first).toBe(same);
+    expect(other).not.toBe(first);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(Math.PI * 2);
+  });
+
+  it('animates NPC idle and patrol poses deterministically without changing topology', () => {
+    const actor = { id: 'dustlands:npc:2', x: 8, y: 10, faction: 'Nomads' as const, role: 'scout' as const };
+    const idle = buildNpcMesh(actor, grass);
+    const patrol = buildNpcMesh(actor, grass, { phase: Math.PI / 2, amount: 0.72 });
+    expect(patrol.length).toBe(idle.length);
+    expect(patrol.every(Number.isFinite)).toBe(true);
+    expect(Array.from(patrol)).not.toEqual(Array.from(idle));
+    expect(Array.from(buildNpcMesh(actor, grass, { phase: 1.2, amount: 0.4 })))
+      .toEqual(Array.from(buildNpcMesh(actor, grass, { phase: 1.2, amount: 0.4 })));
   });
 
   it('builds event beacons and boss silhouettes', () => {
