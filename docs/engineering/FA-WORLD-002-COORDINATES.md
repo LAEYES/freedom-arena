@@ -4,7 +4,7 @@
 - Date : 2026-11-28
 - Branche : feat/fa-world-engine-p0
 - Dépendance : FA-WORLD-001
-- Statut : implémentation ajoutée ; qualification CI en attente.
+- Statut : VALIDATED — CI réussie.
 
 ## Référentiel
 
@@ -53,15 +53,18 @@ Module : `web/src/world/coordinates.ts`.
 
 Aucune sauvegarde existante n'est migrée dans cette tâche. Le type historique `WorldTilePosition { x, y }` reste inchangé. L'intégration aux joueurs et au renderer sera effectuée dans une tâche ultérieure après qualification de cette API indépendante.
 
-## Tests prévus
+## Tests et résultats
 
-- Origine et axes cardinaux.
-- Dimensions de cellules configurables.
-- Conversion monde/grille.
-- Projection isométrique et inversion avec altitude.
-- Origine écran et dimensions configurables.
-- Arrondi vers la tuile la plus proche.
-- Bornes 64 × 64.
-- Rejet des coordonnées non finies et configurations invalides.
+- 8 groupes de tests Vitest ajoutés.
+- GitHub Actions — Web build, run #139 : **success**.
+- Étape `npm run test` : **success**.
+- Étape `npm run build` : **success**.
+- GitHub Actions — Hostinger Deploy, run #77 : build **success**, étape `Upload dist to Hostinger` **skipped**.
+- Validation arithmétique indépendante locale : 8 groupes de contrôles exécutés avec Node.js 22.16.0, tous réussis.
+- Aucun déploiement Hostinger n'a été exécuté par ce workflow.
 
-Le résultat réel de Vitest et du build doit être obtenu par GitHub Actions avant le passage de statut à VALIDATED.
+## Décision
+
+**FA-WORLD-002 : VALIDATED.**
+
+Les conversions grille/monde/écran sont isolées, paramétrables, réversibles avec altitude connue et couvertes par CI. Le schéma historique de sauvegarde reste intact.
