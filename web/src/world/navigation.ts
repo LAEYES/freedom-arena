@@ -5,12 +5,15 @@ export type NavigationOptions = {
   allowDiagonal: boolean;
   blockedTiles: ReadonlySet<string>;
   maxExpandedNodes: number;
+  /** Water tiles explicitly made traversable by validated bridge links. */
+  bridgeTiles: ReadonlySet<string>;
 };
 
 export const DEFAULT_NAVIGATION_OPTIONS: Readonly<NavigationOptions> = Object.freeze({
   allowDiagonal: true,
   blockedTiles: new Set<string>(),
   maxExpandedNodes: 8192,
+  bridgeTiles: new Set<string>(),
 });
 
 type QueueEntry = { i: number; j: number; g: number; f: number; order: number };
@@ -67,9 +70,11 @@ export function isTileBlocked(
   i: number,
   j: number,
   blockedTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.blockedTiles,
+  bridgeTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.bridgeTiles,
 ): boolean {
   const tile = getTerrainTile(map, i, j);
-  return !tile || !tile.walkable || blockedTiles.has(tileKey(i, j));
+  const key = tileKey(i, j);
+  return !tile || (!tile.walkable && !bridgeTiles.has(key)) || blockedTiles.has(key);
 }
 
 function neighbors(allowDiagonal: boolean): Array<{ di: number; dj: number; cost: number }> {
@@ -98,8 +103,10 @@ function octileDistance(i: number, j: number, targetI: number, targetJ: number):
 function stepCost(
   destination: TerrainTile,
   geometricCost: number,
+  bridgeTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.bridgeTiles,
 ): number {
-  return destination.movementCost * geometricCost;
+  const movementCost = bridgeTiles.has(tileKey(destination.i, destination.j)) ? 2.25 : destination.movementCost;
+  return movementCost * geometricCost;
 }
 
 export function canStep(
@@ -107,19 +114,20 @@ export function canStep(
   from: Pick<TileCoordinate, 'i' | 'j'>,
   to: Pick<TileCoordinate, 'i' | 'j'>,
   blockedTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.blockedTiles,
+  bridgeTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.bridgeTiles,
 ): boolean {
   const di = to.i - from.i;
   const dj = to.j - from.j;
   if (!Number.isInteger(from.i) || !Number.isInteger(from.j) || !Number.isInteger(to.i) || !Number.isInteger(to.j)) return false;
   if (Math.max(Math.abs(di), Math.abs(dj)) !== 1) return false;
-  if (isTileBlocked(map, to.i, to.j, blockedTiles)) return false;
+  if (isTileBlocked(map, to.i, to.j, blockedTiles, bridgeTiles)) return false;
 
   // Prevent diagonal corner cutting through two blocked orthogonal cells.
   if (di !== 0 && dj !== 0) {
-    if (isTileBlocked(map, from.i + di, from.j, blockedTiles)) return false;
-    if (isTileBlocked(map, from.i, from.j + dj, blockedTiles)) return false;
+    if (isTileBlocked(map, from.i + di, from.j, blockedTiles, bridgeTiles)) return false;
+    if (isTileBlocked(map, from.i, from.j + dj, blockedTiles, bridgeTiles)) return false;
   }
-  return !isTileBlocked(map, from.i, from.j, blockedTiles);
+  return !isTileBlocked(map, from.i, from.j, blockedTiles, bridgeTiles);
 }
 
 export function resolveMovementStep(
@@ -127,8 +135,9 @@ export function resolveMovementStep(
   from: TileCoordinate,
   to: TileCoordinate,
   blockedTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.blockedTiles,
+  bridgeTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.bridgeTiles,
 ): TileCoordinate | null {
-  if (!canStep(map, from, to, blockedTiles)) return null;
+  if (!canStep(map, from, to, blockedTiles, bridgeTiles)) return null;
   const destination = getTerrainTile(map, to.i, to.j);
   return destination ? { i: destination.i, j: destination.j, elevation: destination.elevation } : null;
 }
@@ -145,8 +154,8 @@ export function findTerrainPath(
   }
   if (!Number.isInteger(start.i) || !Number.isInteger(start.j)
     || !Number.isInteger(target.i) || !Number.isInteger(target.j)) return [];
-  if (isTileBlocked(map, start.i, start.j, config.blockedTiles)
-    || isTileBlocked(map, target.i, target.j, config.blockedTiles)) return [];
+  if (isTileBlocked(map, start.i, start.j, config.blockedTiles, config.bridgeTiles)
+    || isTileBlocked(map, target.i, target.j, config.blockedTiles, config.bridgeTiles)) return [];
 
   if (start.i === target.i && start.j === target.j) {
     const tile = getTerrainTile(map, start.i, start.j)!;
@@ -189,15 +198,15 @@ export function findTerrainPath(
     for (const direction of directions) {
       const nextI = current.i + direction.di;
       const nextJ = current.j + direction.dj;
-      if (isTileBlocked(map, nextI, nextJ, config.blockedTiles)) continue;
+      if (isTileBlocked(map, nextI, nextJ, config.blockedTiles, config.bridgeTiles)) continue;
       if (direction.di !== 0 && direction.dj !== 0) {
-        if (isTileBlocked(map, current.i + direction.di, current.j, config.blockedTiles)
-          || isTileBlocked(map, current.i, current.j + direction.dj, config.blockedTiles)) continue;
+        if (isTileBlocked(map, current.i + direction.di, current.j, config.blockedTiles, config.bridgeTiles)
+          || isTileBlocked(map, current.i, current.j + direction.dj, config.blockedTiles, config.bridgeTiles)) continue;
       }
 
       const nextTile = getTerrainTile(map, nextI, nextJ)!;
       const nextKey = tileKey(nextI, nextJ);
-      const candidate = current.g + stepCost(nextTile, direction.cost);
+      const candidate = current.g + stepCost(nextTile, direction.cost, config.bridgeTiles);
       if (candidate >= (bestCost.get(nextKey) ?? Infinity)) continue;
 
       bestCost.set(nextKey, candidate);
@@ -218,6 +227,7 @@ export function findTerrainPath(
 export function calculateTerrainPathCost(
   map: TerrainMap,
   path: TileCoordinate[],
+  bridgeTiles: ReadonlySet<string> = DEFAULT_NAVIGATION_OPTIONS.bridgeTiles,
 ): number {
   if (path.length <= 1) return 0;
   let total = 0;
@@ -228,12 +238,12 @@ export function calculateTerrainPathCost(
     const dj = Math.abs(current.j - previous.j);
     if (Math.max(di, dj) !== 1) return Infinity;
     const tile = getTerrainTile(map, current.i, current.j);
-    if (!tile || !tile.walkable) return Infinity;
+    if (!tile || (!tile.walkable && !bridgeTiles.has(tileKey(current.i, current.j)))) return Infinity;
     if (di === 1 && dj === 1) {
-      if (isTileBlocked(map, previous.i + (current.i - previous.i), previous.j)
-        || isTileBlocked(map, previous.i, previous.j + (current.j - previous.j))) return Infinity;
+      if (isTileBlocked(map, previous.i + (current.i - previous.i), previous.j, DEFAULT_NAVIGATION_OPTIONS.blockedTiles, bridgeTiles)
+        || isTileBlocked(map, previous.i, previous.j + (current.j - previous.j), DEFAULT_NAVIGATION_OPTIONS.blockedTiles, bridgeTiles)) return Infinity;
     }
-    total += stepCost(tile, di === 1 && dj === 1 ? Math.SQRT2 : 1);
+    total += stepCost(tile, di === 1 && dj === 1 ? Math.SQRT2 : 1, bridgeTiles);
   }
   return total;
 }
