@@ -17,6 +17,7 @@ import {
   pickNearestTerrainTile,
   terrainWorldHeight,
   buildNpcMesh,
+  npcAnimationPhase,
   buildPoiBuildingMesh,
   buildEventBeaconMesh,
   buildBossMesh,
