@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { cameraModeIndex, clampCameraZoom, normalizeCameraRotation, type CameraMode } from './camera';
+import { cameraModeIndex, clampCameraZoom, normalizeCameraRotation, type CameraMode, type CameraState } from './camera';
 
 type Props = {
   player: { x: number; y: number };
@@ -10,6 +10,7 @@ type Props = {
   cameraMode?: CameraMode;
   cameraRotation?: number;
   zoom?: number;
+  onCameraChange?: (patch: Partial<CameraState>) => void;
 };
 
 type V3 = [number, number, number];
@@ -32,8 +33,14 @@ function addGround(out:number[]) {
   out.push(-8,0,-8,8,0,-8,8,0,8,-8,0,-8,8,0,8,-8,0,8);
 }
 
-export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1 }: Props) {
+export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 'isometric', cameraRotation = Math.PI / 4, zoom = 1, onCameraChange }: Props) {
   const ref=useRef<HTMLCanvasElement>(null);
+  const pointerRef=useRef<{id:number;x:number}|null>(null);
+  const onPointerDown=(event:React.PointerEvent<HTMLCanvasElement>)=>{pointerRef.current={id:event.pointerId,x:event.clientX};event.currentTarget.setPointerCapture(event.pointerId);};
+  const onPointerMove=(event:React.PointerEvent<HTMLCanvasElement>)=>{const pointer=pointerRef.current;if(!pointer||pointer.id!==event.pointerId)return;const delta=event.clientX-pointer.x;pointer.x=event.clientX;if(Math.abs(delta)>0)onCameraChange?.({rotation:cameraRotation+delta*0.008});};
+  const onPointerUp=(event:React.PointerEvent<HTMLCanvasElement>)=>{if(pointerRef.current?.id===event.pointerId)pointerRef.current=null;};
+  const onWheel=(event:React.WheelEvent<HTMLCanvasElement>)=>{event.preventDefault();onCameraChange?.({zoom:zoom+(event.deltaY<0?0.08:-0.08)});};
+  const onKeyDown=(event:React.KeyboardEvent<HTMLCanvasElement>)=>{if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();onCameraChange?.({rotation:cameraRotation+(event.key==='ArrowLeft'?-1:1)*Math.PI/12});}else if(event.key==='+'||event.key==='='){event.preventDefault();onCameraChange?.({zoom:zoom+0.1});}else if(event.key==='-'){event.preventDefault();onCameraChange?.({zoom:zoom-0.1});}};
 
   useEffect(()=>{
     if(!enabled)return;
@@ -203,5 +210,5 @@ export function World3D({ player, threat, weather, cycle, enabled, cameraMode = 
     return()=>{cancelAnimationFrame(raf);gl.deleteBuffer(buffer);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs)};
   },[enabled,player.x,player.y,threat,weather,cycle,cameraMode,cameraRotation,zoom]);
 
-  return <canvas ref={ref} className="world-3d-canvas" aria-label="3D tactical world"/>;
+  return <canvas ref={ref} className="world-3d-canvas" aria-label="3D tactical world" tabIndex={0} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} onWheel={onWheel} onKeyDown={onKeyDown}/>;
 }
